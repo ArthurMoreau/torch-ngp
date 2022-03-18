@@ -239,7 +239,10 @@ class NeRFRenderer(nn.Module):
             self.local_step += 1
 
             xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, self.bound, self.density_grid, self.mean_density, self.iter_density, counter, self.mean_count, perturb, 128, False)
+            
+            #TODO: add app_emb param
             sigmas, rgbs = self(xyzs, dirs)
+            
             weights_sum, image = raymarching.composite_rays_train(sigmas, rgbs, deltas, rays, self.bound)
 
             # composite bg (shade_kernel_nerf)

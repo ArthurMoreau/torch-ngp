@@ -303,6 +303,8 @@ class Trainer(object):
         poses = data["pose"] # [B, 4, 4]
         intrinsics = data["intrinsic"] # [B, 3, 3]
 
+        #TODO: add image_indices = data["index"]
+
         # sample rays 
         B, H, W, C = images.shape
         rays_o, rays_d, inds = get_rays(poses, intrinsics, H, W, self.conf['num_rays'])
@@ -316,8 +318,9 @@ class Trainer(object):
         else:
             gt_rgb = images
 
+        #TODO: add image_indices in parameters of render function
         outputs = self.model.render(rays_o, rays_d, staged=False, bg_color=bg_color, perturb=True, **self.conf)
-    
+        
         pred_rgb = outputs['rgb']
 
         loss = self.criterion(pred_rgb, gt_rgb)
@@ -329,6 +332,8 @@ class Trainer(object):
         poses = data["pose"] # [B, 4, 4]
         intrinsics = data["intrinsic"] # [B, 3, 3]
 
+        #TODO: add same modifications than in train_step 
+        
         # sample rays 
         B, H, W, C = images.shape
         rays_o, rays_d, _ = get_rays(poses, intrinsics, H, W, -1)
