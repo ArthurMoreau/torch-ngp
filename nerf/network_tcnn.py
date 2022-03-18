@@ -7,6 +7,7 @@ import numpy as np
 import tinycudann as tcnn
 from .renderer import NeRFRenderer
 
+#TODO: create a new class NeRFWNetwork by copying NeRFNetwork
 
 class NeRFNetwork(NeRFRenderer):
     def __init__(self,
@@ -65,8 +66,10 @@ class NeRFNetwork(NeRFRenderer):
             },
         )
 
+
         self.in_dim_color = self.encoder_dir.n_output_dims + self.geo_feat_dim
 
+        #TODO: replace color_net by 2 networks: static_net and transient_net with appropriate input and output dim
         self.color_net = tcnn.Network(
             n_input_dims=self.in_dim_color,
             n_output_dims=3,
@@ -81,9 +84,11 @@ class NeRFNetwork(NeRFRenderer):
 
     
     def forward(self, x, d):
+        
         # x: [B, N, 3], in [-bound, bound]
         # d: [B, N, 3], nomalized in [-1, 1]
-
+        #TODO: add additional inputs, app_emb and trans_emb, with default set to None
+        
         prefix = x.shape[:-1]
         x = x.view(-1, 3)
         d = d.view(-1, 3)
@@ -122,9 +127,4 @@ class NeRFNetwork(NeRFRenderer):
         x = self.encoder(x)
         h = self.sigma_net(x)
 
-        #sigma = torch.exp(torch.clamp(h[..., 0], -15, 15))
-        sigma = F.relu(h[..., 0])
-
-        sigma = sigma.view(*prefix)
-
-        return sigma
+        #sigma = tor
