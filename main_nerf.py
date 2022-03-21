@@ -52,7 +52,14 @@ if __name__ == '__main__':
     else:
         from nerf.network import NeRFNetwork
 
-    model = NeRFNetwork(
+    # model = NeRFNetwork(
+    #     bound=opt.bound,
+    #     cuda_ray=opt.cuda_ray,
+    # )
+
+    from nerf.network_tcnn import NeRFWNetwork
+    
+    model = NeRFWNetwork(
         bound=opt.bound,
         cuda_ray=opt.cuda_ray,
     )
@@ -80,13 +87,23 @@ if __name__ == '__main__':
                 trainer.test(test_loader) # colmap doesn't have gt, so just test.
     
     else:
+        
+        # optimizer = lambda model: torch.optim.Adam([
+        #     {'name': 'encoding', 'params': list(model.encoder.parameters())},
+        #     {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},
+        # ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
 
-        optimizer = lambda model: torch.optim.Adam([
-            {'name': 'encoding', 'params': list(model.encoder.parameters())},
-            {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},
-        ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
 
         #TODO: add appearance embeddings parameters into the second optimizer 'net'
+        optimizer = lambda model: torch.optim.Adam([
+            {'name': 'encoding', 'params': list(model.encoder.parameters())},
+            {'name': 'net', 'params': list(model.sigma_net.parameters()) 
+            + list(model.color_net_s.parameters()) 
+            + list(model.color_net_t.parameters())
+            + list(model.embedding_a.parameters())
+            + list(model.embedding_t.parameters()), 'weight_decay': 1e-6},
+        ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
+
 
         # need different milestones for GUI/CMD mode.
         scheduler = lambda optimizer: optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1000, 1500, 2000] if opt.gui else [50, 100, 150], gamma=0.33)

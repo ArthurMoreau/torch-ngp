@@ -19,10 +19,16 @@ class NeRFWNetwork(NeRFRenderer):
                  hidden_dim_color=64,
                  bound=1,
                  cuda_ray=False,
-                 encode_appearance=False,in_channels_a=48,
-                 encode_transient=False,in_channels_t=16,
+                 encode_appearance=True,in_channels_a=16,
+                 encode_transient=True,in_channels_t=16,
+                 N_vocab = 100
                  ):
         super().__init__(bound, cuda_ray)
+
+        #TODO: add appearance (and later transient) embeddings similar to https://github.com/kwea123/nerf_pl/blob/nerfw/train.py#L42
+        # add l_a l_t to the model
+        self.embedding_a = torch.nn.Embedding(N_vocab, in_channels_a)
+        self.embedding_t = torch.nn.Embedding(N_vocab, in_channels_t)
 
         # sigma network
         self.num_layers = num_layers
@@ -74,7 +80,7 @@ class NeRFWNetwork(NeRFRenderer):
 
         #TODO: replace color_net by 2 networks: static_net and transient_net with appropriate input and output dim
         self.color_net_s = tcnn.Network(
-            n_input_dims=self.in_dim_color_a,
+            n_input_dims=self.in_dim_color_s,
             n_output_dims=3,
             network_config={
                 "otype": "FullyFusedMLP",
@@ -135,14 +141,17 @@ class NeRFWNetwork(NeRFRenderer):
         # transient sigma and color
         h_t = torch.cat([geo_feat, l_t], dim=-1)
         h_t = self.color_net_t(h_t)
-        # qestion?
+        # problem avec torch.split?
         color_t, sigma_t, beta = torch.split(h_t,[3,1,1])
 
         color_t = torch.sigmoid(color_t)
         sigma_t = torch.nn.softplus(sigma_t)
         beta  = torch.nn.softplus(beta)
 
-        return sigma_s, color_s, sigma_t, color_t, beta
+        static = torch.cat([color_s, sigma_s], dim=-1)
+        transient = torch.cat([color_t, sigma_t, beta], dim=-1)
+        
+        return torch.cat([static, transient], dim=-1)
 
     def density(self, x):
         # x: [B, N, 3], in [-bound, bound]
