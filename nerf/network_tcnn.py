@@ -189,6 +189,9 @@ class NeRFNetwork(NeRFRenderer):
             },
         )
 
+        #TODO: add appearance (and later transient) embeddings similar to https://github.com/kwea123/nerf_pl/blob/nerfw/train.py#L42
+
+
         self.sigma_net = tcnn.Network(
             n_input_dims=32,
             n_output_dims=1 + self.geo_feat_dim,
@@ -216,7 +219,7 @@ class NeRFNetwork(NeRFRenderer):
 
         self.in_dim_color = self.encoder_dir.n_output_dims + self.geo_feat_dim
 
-        #TODO: replace color_net by 2 networks: static_net and transient_net with appropriate input and output dim
+        #TODO: replace color_net by 2 networks: static_net (and later transient_net) with appropriate input and output dim
         self.color_net = tcnn.Network(
             n_input_dims=self.in_dim_color,
             n_output_dims=3,

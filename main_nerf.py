@@ -86,6 +86,8 @@ if __name__ == '__main__':
             {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},
         ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
 
+        #TODO: add appearance embeddings parameters into the second optimizer 'net'
+
         # need different milestones for GUI/CMD mode.
         scheduler = lambda optimizer: optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1000, 1500, 2000] if opt.gui else [50, 100, 150], gamma=0.33)
 
