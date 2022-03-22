@@ -146,6 +146,9 @@ class NeRFWNetwork(NeRFRenderer):
         
         # x: [B, N, 3], in [-bound, bound]
         # d: [B, N, 3], nomalized in [-1, 1]
+        # l_a: [B, N, in_channels_a=16]
+        # l_t: [B, N, in_channels_t =16]
+
         #TODO: add additional inputs, app_emb and trans_emb, with default set to None
         
         prefix = x.shape[:-1]

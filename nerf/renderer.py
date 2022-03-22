@@ -121,7 +121,7 @@ class NeRFRenderer(nn.Module):
         self.mean_count = 0
         self.local_step = 0
 
-    def run(self, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb):
+    def run(self, rays_o, rays_d, image_indice, num_steps, upsample_steps, bg_color, perturb):
         # rays_o, rays_d: [B, N, 3], assumes B == 1
         # bg_color: [3] in range [0, 1]
         # return: image: [B, N, 3], depth: [B, N]
@@ -153,13 +153,31 @@ class NeRFRenderer(nn.Module):
         #plot_pointcloud(pts.reshape(-1, 3).detach().cpu().numpy())
 
         # query SDF and RGB
+        ######################### start change #################################3
         dirs = rays_d.unsqueeze(-2).expand_as(pts)
+        N_ = pts.reshape(B, -1, 3).shape[1]
+        l_a = self.embedding_a(image_indice)
+        l_a = torch.broadcast_to(l_a, (B,N_,16))
+        #print("##################",l_a.shape)
+        l_t = self.embedding_t(image_indice)
+        l_t = torch.broadcast_to(l_t, (B,N_,16))
+        static, transient = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t, only_static = False)
+        # static part
+        sigmas = static[..., 0].unsqueeze(-1) # static
+        rgbs = static[..., 1:] #static
 
-        sigmas, rgbs = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3))
+        # transient part
+        color_t = transient[..., :3]
+        sigmas_t = transient[..., 3].unsqueeze(-1)
+        beta = transient[..., 4].unsqueeze(-1)
+
+
+
+        #sigmas, rgbs = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3))
 
         rgbs = rgbs.reshape(B, N, num_steps, 3) # [B, N, T, 3]
         sigmas = sigmas.reshape(B, N, num_steps) # [B, N, T]
-
+        ################################end########################################
         # upsample z_vals (nerf-like)
         if upsample_steps > 0:
             with torch.no_grad():
@@ -181,7 +199,24 @@ class NeRFRenderer(nn.Module):
 
             # only forward new points to save computation
             new_dirs = rays_d.unsqueeze(-2).expand_as(new_pts)
-            new_sigmas, new_rgbs = self(new_pts.reshape(B, -1, 3), new_dirs.reshape(B, -1, 3))
+            #########################start change##########################
+            new_N = new_pts.reshape(B, -1, 3).shape[1]
+            l_a = self.embedding_a(image_indice)
+            l_a = torch.broadcast_to(l_a, (B,new_N,16))
+            l_t = self.embedding_t(image_indice)
+            l_t = torch.broadcast_to(l_t, (B,new_N,16))
+            static_new, transient_new = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t, only_static = False)
+            # static part
+            new_sigmas = static_new[..., 0].unsqueeze(-1) # static
+            new_rgbs = static_new[..., 1:] #static
+
+            # transient part
+            # color_t = transient[..., :3]
+            # sigmas_t = transient[..., 3].unsqueeze(-1)
+            # beta = transient[..., 4].unsqueeze(-1)
+            ############################ end #######################
+
+            #new_sigmas, new_rgbs = self(new_pts.reshape(B, -1, 3), new_dirs.reshape(B, -1, 3))
             new_rgbs = new_rgbs.reshape(B, N, upsample_steps, 3) # [B, N, t, 3]
             new_sigmas = new_sigmas.reshape(B, N, upsample_steps) # [B, N, t]
 
@@ -222,7 +257,7 @@ class NeRFRenderer(nn.Module):
         return depth, image
 
 
-    def run_cuda(self, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb):
+    def run_cuda(self, rays_o, rays_d, image_indice, num_steps, upsample_steps, bg_color, perturb):
         # rays_o, rays_d: [B, N, 3], assumes B == 1
         # return: image: [B, N, 3], depth: [B, N]
 
@@ -241,9 +276,19 @@ class NeRFRenderer(nn.Module):
             xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, self.bound, self.density_grid, self.mean_density, self.iter_density, counter, self.mean_count, perturb, 128, False)
             
             #TODO: add app_emb param
-            sigmas, rgbs = self(xyzs, dirs)
-            
-            weights_sum, image = raymarching.composite_rays_train(sigmas, rgbs, deltas, rays, self.bound)
+            #sigmas, rgbs = self(xyzs, dirs)
+            l_a = self.embedding_a[image_indice, :]
+            l_t = self.embedding_t[image_indice, :]
+            static, transient = self(xyzs, dirs, l_a, l_t, only_static = False)
+            # static part
+            sigmas_s = static[..., 0].unsqueeze(-1)
+            rgbs_s = static[..., 1:]
+
+            # transient part
+            color_t = transient[..., :3]
+            sigmas_t = transient[..., 3].unsqueeze(-1)
+            beta = transient[..., 4].unsqueeze(-1)
+            weights_sum, image = raymarching.composite_rays_train(sigmas_s, rgbs_s, deltas, rays, self.bound)
 
             # composite bg (shade_kernel_nerf)
             image = image + (1 - weights_sum).unsqueeze(-1) * bg_color
@@ -363,7 +408,7 @@ class NeRFRenderer(nn.Module):
         #print(f'[density grid] min={self.density_grid.min().item():.4f}, max={self.density_grid.max().item():.4f}, mean={self.mean_density:.4f} | [step counter] mean={self.mean_count}')
 
 
-    def render(self, rays_o, rays_d, num_steps=128, upsample_steps=128, staged=False, max_ray_batch=4096, bg_color=None, perturb=False, **kwargs):
+    def render(self, rays_o, rays_d, image_indices, num_steps=128, upsample_steps=128, staged=False, max_ray_batch=4096, bg_color=None, perturb=False, **kwargs):
         # rays_o, rays_d: [B, N, 3], assumes B == 1
         # return: pred_rgb: [B, N, 3]
 
@@ -389,7 +434,7 @@ class NeRFRenderer(nn.Module):
                     image[b:b+1, head:tail] = image_
                     head += max_ray_batch
         else:
-            depth, image = _run(rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb)
+            depth, image = _run(rays_o, rays_d, image_indices, num_steps, upsample_steps, bg_color, perturb)
 
         results = {}
         results['depth'] = depth

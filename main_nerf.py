@@ -20,7 +20,8 @@ if __name__ == '__main__':
     # (only valid when not using --cuda_ray)
     parser.add_argument('--num_steps', type=int, default=128)
     parser.add_argument('--upsample_steps', type=int, default=128)
-    parser.add_argument('--max_ray_batch', type=int, default=4096)
+    #parser.add_argument('--max_ray_batch', type=int, default=4096)
+    parser.add_argument('--max_ray_batch', type=int, default=1028)
     ### network backbone options
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
     parser.add_argument('--ff', action='store_true', help="use fully-fused MLP")
@@ -95,11 +96,22 @@ if __name__ == '__main__':
 
 
         #TODO: add appearance embeddings parameters into the second optimizer 'net'
+        # optimizer = lambda model: torch.optim.Adam([
+        #     {'name': 'encoding', 'params': list(model.encoder.parameters())},
+        #     {'name': 'net', 'params': list(model.sigma_net.parameters()) 
+        #     + list(model.color_net_s.parameters()) 
+        #     + list(model.color_net_t.parameters())
+        #     + list(model.embedding_a.parameters())
+        #     + list(model.embedding_t.parameters()), 'weight_decay': 1e-6},
+        # ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
+        
         optimizer = lambda model: torch.optim.Adam([
             {'name': 'encoding', 'params': list(model.encoder.parameters())},
             {'name': 'net', 'params': list(model.sigma_net.parameters()) 
-            + list(model.color_net_s.parameters()) 
-            + list(model.color_net_t.parameters())
+            + list(model.color_net_s.parameters())
+            + list(model.color_net_t_beta.parameters())
+            + list(model.color_net_t_sigma.parameters())
+            + list(model.color_net_t_rgb.parameters())
             + list(model.embedding_a.parameters())
             + list(model.embedding_t.parameters()), 'weight_decay': 1e-6},
         ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
@@ -107,9 +119,9 @@ if __name__ == '__main__':
 
         # need different milestones for GUI/CMD mode.
         scheduler = lambda optimizer: optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1000, 1500, 2000] if opt.gui else [50, 100, 150], gamma=0.33)
-
+        print("################### before trainer  ################")
         trainer = Trainer('ngp', vars(opt), model, workspace=opt.workspace, optimizer=optimizer, criterion=criterion, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, metrics=[PSNRMeter()], use_checkpoint='latest', eval_interval=10)
-
+        print("################### after trainer  ################",trainer)
         # need different dataset type for GUI/CMD mode.
 
         if opt.gui:
