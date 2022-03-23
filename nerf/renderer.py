@@ -153,12 +153,11 @@ class NeRFRenderer(nn.Module):
         #plot_pointcloud(pts.reshape(-1, 3).detach().cpu().numpy())
 
         # query SDF and RGB
-        ######################### start change #################################3
+        ######################### start change #################################
         dirs = rays_d.unsqueeze(-2).expand_as(pts)
         N_ = pts.reshape(B, -1, 3).shape[1]
         l_a = self.embedding_a(image_indice)
         l_a = torch.broadcast_to(l_a, (B,N_,16))
-        #print("##################",l_a.shape)
         l_t = self.embedding_t(image_indice)
         l_t = torch.broadcast_to(l_t, (B,N_,16))
         static, transient = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t, only_static = False)
@@ -171,14 +170,13 @@ class NeRFRenderer(nn.Module):
         sigmas_t = transient[..., 3].unsqueeze(-1)
         beta = transient[..., 4].unsqueeze(-1)
 
-
-
+        # original code
         #sigmas, rgbs = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3))
-
+        ################################ end ####################################
+        
         rgbs = rgbs.reshape(B, N, num_steps, 3) # [B, N, T, 3]
         sigmas = sigmas.reshape(B, N, num_steps) # [B, N, T]
-        ################################end########################################
-        # upsample z_vals (nerf-like)
+        # upsample z_vals (nerf-like) 
         if upsample_steps > 0:
             with torch.no_grad():
 
@@ -199,24 +197,23 @@ class NeRFRenderer(nn.Module):
 
             # only forward new points to save computation
             new_dirs = rays_d.unsqueeze(-2).expand_as(new_pts)
-            #########################start change##########################
+
+            ######################### start change ##########################
             new_N = new_pts.reshape(B, -1, 3).shape[1]
             l_a = self.embedding_a(image_indice)
             l_a = torch.broadcast_to(l_a, (B,new_N,16))
             l_t = self.embedding_t(image_indice)
             l_t = torch.broadcast_to(l_t, (B,new_N,16))
             static_new, transient_new = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t, only_static = False)
+
             # static part
             new_sigmas = static_new[..., 0].unsqueeze(-1) # static
             new_rgbs = static_new[..., 1:] #static
 
-            # transient part
-            # color_t = transient[..., :3]
-            # sigmas_t = transient[..., 3].unsqueeze(-1)
-            # beta = transient[..., 4].unsqueeze(-1)
-            ############################ end #######################
+            # original code
+            # new_sigmas, new_rgbs = self(new_pts.reshape(B, -1, 3), new_dirs.reshape(B, -1, 3))
+            ############################ end #################################
 
-            #new_sigmas, new_rgbs = self(new_pts.reshape(B, -1, 3), new_dirs.reshape(B, -1, 3))
             new_rgbs = new_rgbs.reshape(B, N, upsample_steps, 3) # [B, N, t, 3]
             new_sigmas = new_sigmas.reshape(B, N, upsample_steps) # [B, N, t]
 
@@ -429,7 +426,7 @@ class NeRFRenderer(nn.Module):
                 head = 0
                 while head < N:
                     tail = min(head + max_ray_batch, N)
-                    depth_, image_ = _run(rays_o[b:b+1, head:tail], rays_d[b:b+1, head:tail], num_steps, upsample_steps, bg_color, perturb)
+                    depth_, image_ = _run(rays_o[b:b+1, head:tail], rays_d[b:b+1, head:tail],image_indices, num_steps, upsample_steps, bg_color, perturb)
                     depth[b:b+1, head:tail] = depth_
                     image[b:b+1, head:tail] = image_
                     head += max_ray_batch

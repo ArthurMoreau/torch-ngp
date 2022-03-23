@@ -22,13 +22,11 @@ class NeRFWNetwork(NeRFRenderer):
                  cuda_ray=False,
                  in_channels_a=16,
                  in_channels_t=16,
-                 N_vocab = 100
+                 N_vocab = 1000
                  ):
         super().__init__(bound, cuda_ray)
 
         #TODO: add appearance (and later transient) embeddings similar to https://github.com/kwea123/nerf_pl/blob/nerfw/train.py#L42
-        # add l_a l_t to the model
-
         self.embedding_a = torch.nn.Embedding(N_vocab, in_channels_a)
         self.embedding_t = torch.nn.Embedding(N_vocab, in_channels_t)
 
@@ -95,17 +93,6 @@ class NeRFWNetwork(NeRFRenderer):
 
         self.in_dim_color_t = self.geo_feat_dim + self.in_channels_t
 
-        # self.color_net_t = tcnn.Network(
-        #     n_input_dims=self.in_dim_color_t,
-        #     n_output_dims=3 + 1 + 1,
-        #     network_config={
-        #         "otype": "FullyFusedMLP",
-        #         "activation": "ReLU",
-        #         "output_activation": "None",
-        #         "n_neurons": hidden_dim_color,
-        #         "n_hidden_layers": num_layers_color - 1,
-        #     },
-        # )
         self.color_net_t_sigma = tcnn.Network(
             n_input_dims=self.in_dim_color_t,
             n_output_dims=1,
@@ -147,7 +134,7 @@ class NeRFWNetwork(NeRFRenderer):
         # x: [B, N, 3], in [-bound, bound]
         # d: [B, N, 3], nomalized in [-1, 1]
         # l_a: [B, N, in_channels_a=16]
-        # l_t: [B, N, in_channels_t =16]
+        # l_t: [B, N, in_channels_t=16]
 
         #TODO: add additional inputs, app_emb and trans_emb, with default set to None
         
@@ -168,7 +155,6 @@ class NeRFWNetwork(NeRFRenderer):
         d = (d + 1) / 2 # tcnn SH encoding requires inputs to be in [0, 1]
         d = self.encoder_dir(d)
 
-        # p = torch.zeros_like(geo_feat[..., :1]) # manual input padding 
         h_s = torch.cat([d, geo_feat, l_a], dim=-1)
         h_s = self.color_net_s(h_s)
         
@@ -178,21 +164,6 @@ class NeRFWNetwork(NeRFRenderer):
         sigma_s = sigma_s.view(*prefix, -1)
         color_s = color_s.view(*prefix, -1)
         static = torch.cat([color_s, sigma_s], dim=-1)
-
-        # # transient sigma and color
-        # h_t = torch.cat([geo_feat, l_t], dim=-1)
-        # h_t = self.color_net_t(h_t)
-        # # problem avec torch.split?
-        # color_t = h_t[..., :3]
-        # sigma_t = h_t[..., 3].unsqueeze(-1)
-        # beta = h_t[..., 4].unsqueeze(-1)
-
-        # color_t = torch.sigmoid(color_t)
-        # sigma_t = torch.nn.softplus(sigma_t)
-        # beta  = torch.nn.softplus(beta)
-
-        # static = torch.cat([color_s, sigma_s], dim=-1)
-        # transient = torch.cat([color_t, sigma_t, beta], dim=-1)
         
         if not only_static: 
             # transient sigma and color
@@ -202,19 +173,9 @@ class NeRFWNetwork(NeRFRenderer):
             color_t = self.color_net_t_rgb(h_t)
             beta = self.color_net_t_beta(h_t)
 
-            # problem avec torch.split?
-            # color_t = h_t[..., :3]
-            # sigma_t = h_t[..., 3].unsqueeze(-1)
-            # beta = h_t[..., 4].unsqueeze(-1)
-
-            # color_t = torch.sigmoid(color_t)
-            # sigma_t = torch.nn.Softplus(sigma_t)
-            # beta  = torch.nn.Softplus(beta)
-
             color_t = color_t.view(*prefix, -1)
             sigma_t = sigma_t.view(*prefix, -1)
             beta = beta.view(*prefix, -1)
-
 
             transient = torch.cat([color_t, sigma_t, beta], dim=-1)
 

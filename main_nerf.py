@@ -26,6 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
     parser.add_argument('--ff', action='store_true', help="use fully-fused MLP")
     parser.add_argument('--tcnn', action='store_true', help="use TCNN backend")
+    parser.add_argument('--tcnnw', action='store_true', help="use TCNN backend NeRF in the Wild")
     ### dataset options
     parser.add_argument('--mode', type=str, default='colmap', help="dataset mode, supports (colmap, blender)")
     parser.add_argument('--preload', action='store_true', help="preload all data into GPU, fasten training but use more GPU memory")
@@ -50,20 +51,22 @@ if __name__ == '__main__':
         from nerf.network_ff import NeRFNetwork
     elif opt.tcnn:
         from nerf.network_tcnn import NeRFNetwork
+    elif opt.tcnnw:
+        from nerf.network_tcnn import NeRFWNetwork
+        model = NeRFWNetwork(
+        bound=opt.bound,
+        cuda_ray=opt.cuda_ray)
     else:
         from nerf.network import NeRFNetwork
 
-    # model = NeRFNetwork(
+    # # model = NeRFNetwork(
+    # #     bound=opt.bound,
+    # #     cuda_ray=opt.cuda_ray,
+    # # )   
+    # model = NeRFWNetwork(
     #     bound=opt.bound,
     #     cuda_ray=opt.cuda_ray,
     # )
-
-    from nerf.network_tcnn import NeRFWNetwork
-    
-    model = NeRFWNetwork(
-        bound=opt.bound,
-        cuda_ray=opt.cuda_ray,
-    )
     
     print(model)
 
@@ -88,23 +91,7 @@ if __name__ == '__main__':
                 trainer.test(test_loader) # colmap doesn't have gt, so just test.
     
     else:
-        
-        # optimizer = lambda model: torch.optim.Adam([
-        #     {'name': 'encoding', 'params': list(model.encoder.parameters())},
-        #     {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},
-        # ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
-
-
-        #TODO: add appearance embeddings parameters into the second optimizer 'net'
-        # optimizer = lambda model: torch.optim.Adam([
-        #     {'name': 'encoding', 'params': list(model.encoder.parameters())},
-        #     {'name': 'net', 'params': list(model.sigma_net.parameters()) 
-        #     + list(model.color_net_s.parameters()) 
-        #     + list(model.color_net_t.parameters())
-        #     + list(model.embedding_a.parameters())
-        #     + list(model.embedding_t.parameters()), 'weight_decay': 1e-6},
-        # ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
-        
+        #TODO: add appearance embeddings parameters into the second optimizer 'net'    
         optimizer = lambda model: torch.optim.Adam([
             {'name': 'encoding', 'params': list(model.encoder.parameters())},
             {'name': 'net', 'params': list(model.sigma_net.parameters()) 
@@ -116,12 +103,15 @@ if __name__ == '__main__':
             + list(model.embedding_t.parameters()), 'weight_decay': 1e-6},
         ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
 
+        # optimizer = lambda model: torch.optim.Adam([
+        #     {'name': 'encoding', 'params': list(model.encoder.parameters())},
+        #     {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},
+        # ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
+        # ####################### end of modification ############################
 
         # need different milestones for GUI/CMD mode.
         scheduler = lambda optimizer: optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1000, 1500, 2000] if opt.gui else [50, 100, 150], gamma=0.33)
-        print("################### before trainer  ################")
         trainer = Trainer('ngp', vars(opt), model, workspace=opt.workspace, optimizer=optimizer, criterion=criterion, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, metrics=[PSNRMeter()], use_checkpoint='latest', eval_interval=10)
-        print("################### after trainer  ################",trainer)
         # need different dataset type for GUI/CMD mode.
 
         if opt.gui:
@@ -138,7 +128,8 @@ if __name__ == '__main__':
             valid_dataset = NeRFDataset(opt.path, type='val', mode=opt.mode, downscale=2, scale=opt.scale, preload=opt.preload)
             valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1)
 
-            trainer.train(train_loader, valid_loader, 200)
+            #trainer.train(train_loader, valid_loader, 200)
+            trainer.train(train_loader, valid_loader, 2)
 
             # also test
             test_dataset = NeRFDataset(opt.path, type='test', mode=opt.mode, scale=opt.scale, preload=opt.preload)
