@@ -349,8 +349,8 @@ class Trainer(object):
         else:
             gt_rgb = images
         
-        #ind = torch.randint(0, len(image_indices),(1,)).to(rays_o.device)
-        ind = torch.LongTensor([image_indices]).to(rays_o.device)
+        ind = torch.randint(0, 100,(1,)).to(rays_o.device)
+        #ind = torch.LongTensor([image_indices]).to(rays_o.device)
         print("ind",image_indices)
         #outputs = self.model.render(rays_o, rays_d, staged=True, bg_color=bg_color, perturb=False, **self.conf)
         outputs = self.model.render(rays_o, rays_d, image_indices=ind, staged=True, bg_color=bg_color, perturb=False, **self.conf)
@@ -376,8 +376,8 @@ class Trainer(object):
         if bg_color is not None:
             bg_color = bg_color.to(rays_o.device)
 
-        #ind = torch.randint(0, len(image_indices),(1,)).to(rays_o.device)
-        ind = torch.LongTensor([image_indices]).to(rays_o.device)
+        ind = torch.randint(0, 100,(1,)).to(rays_o.device)
+        # ind = torch.LongTensor([image_indices]).to(rays_o.device)
         print("ind",image_indices)
         # outputs = self.model.render(rays_o, rays_d, staged=True, bg_color=bg_color, perturb=perturb, **self.conf)
         outputs = self.model.render(rays_o, rays_d, ind, staged=True, bg_color=bg_color, perturb=perturb, **self.conf)

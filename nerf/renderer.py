@@ -157,9 +157,9 @@ class NeRFRenderer(nn.Module):
         dirs = rays_d.unsqueeze(-2).expand_as(pts)
         N_ = pts.reshape(B, -1, 3).shape[1]
         l_a = self.embedding_a(image_indice)
-        l_a = torch.broadcast_to(l_a, (B,N_,16))
+        l_a = torch.broadcast_to(l_a, (B,N_, self.in_channel_a))
         l_t = self.embedding_t(image_indice)
-        l_t = torch.broadcast_to(l_t, (B,N_,16))
+        l_t = torch.broadcast_to(l_t, (B,N_, self.in_channel_t))
         static, transient = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t, only_static = False)
         # static part
         sigmas = static[..., 0].unsqueeze(-1) # static
