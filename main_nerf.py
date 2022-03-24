@@ -15,13 +15,14 @@ if __name__ == '__main__':
     parser.add_argument('--workspace', type=str, default='workspace')
     parser.add_argument('--seed', type=int, default=0)
     ### training options
-    parser.add_argument('--num_rays', type=int, default=4096)
+    #parser.add_argument('--num_rays', type=int, default=4096)
+    parser.add_argument('--num_rays', type=int, default=2048)
     parser.add_argument('--cuda_ray', action='store_true', help="use CUDA raymarching instead of pytorch")
     # (only valid when not using --cuda_ray)
     parser.add_argument('--num_steps', type=int, default=128)
     parser.add_argument('--upsample_steps', type=int, default=128)
     #parser.add_argument('--max_ray_batch', type=int, default=4096)
-    parser.add_argument('--max_ray_batch', type=int, default=1028)
+    parser.add_argument('--max_ray_batch', type=int, default=1024)
     ### network backbone options
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
     parser.add_argument('--ff', action='store_true', help="use fully-fused MLP")
@@ -128,8 +129,8 @@ if __name__ == '__main__':
             valid_dataset = NeRFDataset(opt.path, type='val', mode=opt.mode, downscale=2, scale=opt.scale, preload=opt.preload)
             valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1)
 
-            #trainer.train(train_loader, valid_loader, 200)
-            trainer.train(train_loader, valid_loader, 2)
+            trainer.train(train_loader, valid_loader, 1000)
+            #trainer.train(train_loader, valid_loader, 2)
 
             # also test
             test_dataset = NeRFDataset(opt.path, type='test', mode=opt.mode, scale=opt.scale, preload=opt.preload)

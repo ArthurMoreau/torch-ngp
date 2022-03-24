@@ -22,7 +22,7 @@ class NeRFWNetwork(NeRFRenderer):
                  cuda_ray=False,
                  in_channels_a=16,
                  in_channels_t=16,
-                 N_vocab = 1000
+                 N_vocab = 100
                  ):
         super().__init__(bound, cuda_ray)
 
@@ -77,7 +77,7 @@ class NeRFWNetwork(NeRFRenderer):
 
 
         self.in_dim_color_s = self.encoder_dir.n_output_dims + self.geo_feat_dim + self.in_channels_a
-
+        print(self.encoder_dir.n_output_dims,self.geo_feat_dim,self.in_channels_a)
         #TODO: replace color_net by 2 networks: static_net and transient_net with appropriate input and output dim
         self.color_net_s = tcnn.Network(
             n_input_dims=self.in_dim_color_s,
