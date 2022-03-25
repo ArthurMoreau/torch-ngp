@@ -20,8 +20,8 @@ class NeRFWNetwork(NeRFRenderer):
                  hidden_dim_color=64,
                  bound=1,
                  cuda_ray=False,
-                 in_channels_a=16,
-                 in_channels_t=16,
+                 in_channels_a=1,
+                 in_channels_t=1,
                  N_vocab = 100
                  ):
         super().__init__(bound, cuda_ray)
@@ -91,6 +91,8 @@ class NeRFWNetwork(NeRFRenderer):
             },
         )
 
+        # transient net
+
         self.in_dim_color_t = self.geo_feat_dim + self.in_channels_t
 
         self.color_net_t_sigma = tcnn.Network(
@@ -141,6 +143,7 @@ class NeRFWNetwork(NeRFRenderer):
         prefix = x.shape[:-1]
         x = x.view(-1, 3)
         d = d.view(-1, 3)
+        #l_a = torch.zeros(x.size()[0], self.in_channels_a, device=x.device)
         l_a = l_a.view(-1,self.in_channels_a)
 
         # sigma_s
@@ -163,7 +166,7 @@ class NeRFWNetwork(NeRFRenderer):
     
         sigma_s = sigma_s.view(*prefix, -1)
         color_s = color_s.view(*prefix, -1)
-        static = torch.cat([color_s, sigma_s], dim=-1)
+        static = torch.cat([sigma_s, color_s], dim=-1)
         
         if not only_static: 
             # transient sigma and color

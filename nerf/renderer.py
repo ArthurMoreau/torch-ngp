@@ -157,18 +157,20 @@ class NeRFRenderer(nn.Module):
         dirs = rays_d.unsqueeze(-2).expand_as(pts)
         N_ = pts.reshape(B, -1, 3).shape[1]
         l_a = self.embedding_a(image_indice)
-        l_a = torch.broadcast_to(l_a, (B,N_, self.in_channel_a))
+        l_a = torch.broadcast_to(l_a, (B,N_, self.in_channels_a))
         l_t = self.embedding_t(image_indice)
-        l_t = torch.broadcast_to(l_t, (B,N_, self.in_channel_t))
-        static, transient = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t, only_static = False)
+        l_t = torch.broadcast_to(l_t, (B,N_, self.in_channels_t))
+        #static, transient = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t, only_static = False)
+        static = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t, only_static = True)
+
         # static part
         sigmas = static[..., 0].unsqueeze(-1) # static
         rgbs = static[..., 1:] #static
 
         # transient part
-        color_t = transient[..., :3]
-        sigmas_t = transient[..., 3].unsqueeze(-1)
-        beta = transient[..., 4].unsqueeze(-1)
+        # color_t = transient[..., :3]
+        # sigmas_t = transient[..., 3].unsqueeze(-1)
+        # beta = transient[..., 4].unsqueeze(-1)
 
         # original code
         #sigmas, rgbs = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3))
@@ -201,10 +203,11 @@ class NeRFRenderer(nn.Module):
             ######################### start change ##########################
             new_N = new_pts.reshape(B, -1, 3).shape[1]
             l_a = self.embedding_a(image_indice)
-            l_a = torch.broadcast_to(l_a, (B,new_N,16))
+            l_a = torch.broadcast_to(l_a, (B,new_N, self.in_channels_a))
             l_t = self.embedding_t(image_indice)
-            l_t = torch.broadcast_to(l_t, (B,new_N,16))
-            static_new, transient_new = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t, only_static = False)
+            l_t = torch.broadcast_to(l_t, (B,new_N, self.in_channels_t))
+            static_new = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t, only_static = True)
+            #static_new, transient_new = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t, only_static = False)
 
             # static part
             new_sigmas = static_new[..., 0].unsqueeze(-1) # static
