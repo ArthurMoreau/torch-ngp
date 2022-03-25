@@ -302,9 +302,7 @@ class Trainer(object):
         images = data["image"] # [B, H, W, 3/4]
         poses = data["pose"] # [B, 4, 4]
         intrinsics = data["intrinsic"] # [B, 3, 3]
-        
-        #TODO: add image_indices = data["index"]
-        image_indices = data["index"]
+        img_indice =  data["index"]
 
         # sample rays 
         B, H, W, C = images.shape
@@ -319,12 +317,8 @@ class Trainer(object):
         else:
             gt_rgb = images
 
-        #TODO: add image_indices in parameters of render function
-        print("  ind:",image_indices)
-        outputs = self.model.render(rays_o, rays_d, image_indices, staged=False, bg_color=bg_color, perturb=True, **self.conf)
-        #outputs = self.model.render(rays_o, rays_d, staged=False, bg_color=bg_color, perturb=True, **self.conf)
+        outputs = self.model.render(img_indice, rays_o, rays_d, staged=False, bg_color=bg_color, perturb=True, **self.conf)
         #print(self.model.embedding_a(torch.arange(10).to(images.device)))
-
         pred_rgb = outputs['rgb']
 
         loss = self.criterion(pred_rgb, gt_rgb)
@@ -335,9 +329,8 @@ class Trainer(object):
         images = data["image"] # [B, H, W, 3/4]
         poses = data["pose"] # [B, 4, 4]
         intrinsics = data["intrinsic"] # [B, 3, 3]
-        image_indices = data["index"]
-
-        #TODO: add same modifications than in train_step 
+        img_indice =  data["index"]
+        #img_indice = torch.randint(0, 100,(1,)).to(rays_o.device)
         # sample rays 
         B, H, W, C = images.shape
         rays_o, rays_d, _ = get_rays(poses, intrinsics, H, W, -1)
@@ -349,11 +342,7 @@ class Trainer(object):
         else:
             gt_rgb = images
         
-        ind = torch.randint(0, 100,(1,)).to(rays_o.device)
-        #ind = torch.LongTensor([image_indices]).to(rays_o.device)
-        print("ind",image_indices)
-        #outputs = self.model.render(rays_o, rays_d, staged=True, bg_color=bg_color, perturb=False, **self.conf)
-        outputs = self.model.render(rays_o, rays_d, image_indices=ind, staged=True, bg_color=bg_color, perturb=False, **self.conf)
+        outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=False, **self.conf)
 
         pred_rgb = outputs['rgb'].reshape(B, H, W, -1)
         pred_depth = outputs['depth'].reshape(B, H, W)
@@ -366,21 +355,17 @@ class Trainer(object):
     def test_step(self, data, bg_color=None, perturb=False):  
         poses = data["pose"] # [B, 4, 4]
         intrinsics = data["intrinsic"] # [B, 3, 3]
-        image_indices = data["index"]
         H, W = int(data['H'][0]), int(data['W'][0]) # get the target size...
 
         B = poses.shape[0]
 
         rays_o, rays_d, _ = get_rays(poses, intrinsics, H, W, -1)
-
+        img_indice = torch.randint(0, 100,(1,)).to(rays_o.device)
+        
         if bg_color is not None:
             bg_color = bg_color.to(rays_o.device)
 
-        ind = torch.randint(0, 100,(1,)).to(rays_o.device)
-        # ind = torch.LongTensor([image_indices]).to(rays_o.device)
-        print("ind",image_indices)
-        # outputs = self.model.render(rays_o, rays_d, staged=True, bg_color=bg_color, perturb=perturb, **self.conf)
-        outputs = self.model.render(rays_o, rays_d, ind, staged=True, bg_color=bg_color, perturb=perturb, **self.conf)
+        outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=perturb, **self.conf)
 
         pred_rgb = outputs['rgb'].reshape(B, H, W, -1)
         pred_depth = outputs['depth'].reshape(B, H, W)
