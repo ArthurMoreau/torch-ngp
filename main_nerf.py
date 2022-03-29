@@ -25,6 +25,7 @@ if __name__ == '__main__':
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
     parser.add_argument('--ff', action='store_true', help="use fully-fused MLP")
     parser.add_argument('--tcnn', action='store_true', help="use TCNN backend")
+    parser.add_argument('--tcnnw', action='store_true', help="use TCNN backend for Nerf in the Wild")
     ### dataset options
     parser.add_argument('--mode', type=str, default='colmap', help="dataset mode, supports (colmap, blender)")
     parser.add_argument('--preload', action='store_true', help="preload all data into GPU, fasten training but use more GPU memory")
@@ -47,15 +48,28 @@ if __name__ == '__main__':
     if opt.ff:
         assert opt.fp16, "fully-fused mode must be used with fp16 mode"
         from nerf.network_ff import NeRFNetwork
+        model = NeRFNetwork(
+            bound=opt.bound,
+            cuda_ray=opt.cuda_ray,
+        )
     elif opt.tcnn:
         from nerf.network_tcnn import NeRFNetwork
+        model = NeRFNetwork(
+            bound=opt.bound,
+            cuda_ray=opt.cuda_ray,
+        )
+    elif opt.tcnnw:
+        from nerf.network_tcnn import NeRFWNetwork
+        model = NeRFWNetwork(
+            bound=opt.bound,
+            cuda_ray=opt.cuda_ray,
+        )
     else:
         from nerf.network import NeRFNetwork
-
-    model = NeRFNetwork(
-        bound=opt.bound,
-        cuda_ray=opt.cuda_ray,
-    )
+        model = NeRFNetwork(
+            bound=opt.bound,
+            cuda_ray=opt.cuda_ray,
+        )
     
     print(model)
 
