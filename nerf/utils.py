@@ -186,6 +186,7 @@ class Trainer(object):
                  use_checkpoint="latest", # which ckpt to use at init time
                  use_tensorboardX=True, # whether to use tensorboard for logging
                  scheduler_update_every_step=False, # whether to call scheduler.step() after every train step
+                 if_transient = False # wether to use the transient networks or not
                  ):
         
         self.name = name
@@ -208,6 +209,7 @@ class Trainer(object):
         self.scheduler_update_every_step = scheduler_update_every_step
         self.device = device if device is not None else torch.device(f'cuda:{local_rank}' if torch.cuda.is_available() else 'cpu')
         self.console = Console()
+        self.if_transient = if_transient
 
         model.to(self.device)
         if self.world_size > 1:
@@ -317,8 +319,11 @@ class Trainer(object):
         else:
             gt_rgb = images
 
-        outputs = self.model.render(img_indice, rays_o, rays_d, staged=False, bg_color=bg_color, perturb=True, **self.conf)
-        #print(self.model.embedding_a(torch.arange(10).to(images.device)))
+        if not self.if_transient:
+            outputs = self.model.render(img_indice, rays_o, rays_d, staged=False, bg_color=bg_color, perturb=True, **self.conf)
+        else:
+            outputs = self.model.render(img_indice, rays_o, rays_d, staged=False, bg_color=bg_color, perturb=True, **self.conf)
+        print(self.model.embedding_t(torch.arange(10).to(images.device)))
         pred_rgb = outputs['rgb']
 
         loss = self.criterion(pred_rgb, gt_rgb)

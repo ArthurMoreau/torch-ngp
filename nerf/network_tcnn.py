@@ -21,7 +21,8 @@ class NeRFWNetwork(NeRFRenderer):
                  cuda_ray=False,
                  in_channels_a=16,
                  in_channels_t=16,
-                 N_vocab = 100
+                 N_vocab = 100,
+                 if_transient = False,
                  ):
         super().__init__(bound, cuda_ray)
 
@@ -31,6 +32,7 @@ class NeRFWNetwork(NeRFRenderer):
         self.geo_feat_dim = geo_feat_dim
         self.in_channels_a = in_channels_a
         self.in_channels_t = in_channels_t
+        self.if_transient = if_transient
 
         per_level_scale = np.exp2(np.log2(2048 * bound / 16) / (16 - 1))
         self.embedding_a = torch.nn.Embedding(N_vocab, in_channels_a)
@@ -85,11 +87,61 @@ class NeRFWNetwork(NeRFRenderer):
             },
         )
 
+
+        # transient networks
+        self.in_dim_color_t = self.geo_feat_dim + self.in_channels_t
+        self.color_net_t_sigma = tcnn.Network(
+            n_input_dims=self.in_dim_color_t,
+            n_output_dims=1,
+            network_config={
+                "otype": "FullyFusedMLP",
+                "activation": "Softplus",
+                "output_activation": "None",
+                "n_neurons": hidden_dim_color,
+                "n_hidden_layers": 1,
+            },
+        )      
+
+        self.color_net_t_rgb = tcnn.Network(
+            n_input_dims=self.in_dim_color_t,
+            n_output_dims=3,
+            network_config={
+                "otype": "FullyFusedMLP",
+                "activation": "Sigmoid",
+                "output_activation": "None",
+                "n_neurons": hidden_dim_color,
+                "n_hidden_layers": 1,
+            },
+        )     
+
+        self.color_net_t_beta = tcnn.Network(
+            n_input_dims=self.in_dim_color_t,
+            n_output_dims=1,
+            network_config={
+                "otype": "FullyFusedMLP",
+                "activation": "Softplus",
+                "output_activation": "None",
+                "n_neurons": hidden_dim_color,
+                "n_hidden_layers": 1,
+            },
+        )        
+
+        self.transient_encoding = tcnn.Network(
+            n_input_dims=self.in_dim_color_t,
+            n_output_dims=self.in_dim_color_t,
+            network_config={
+                "otype": "FullyFusedMLP",
+                "activation": "ReLU",
+                "output_activation": "None",
+                "n_neurons": hidden_dim_color,
+                "n_hidden_layers": num_layers_color - 2,
+            },
+        )
     
     def forward(self, x, d, l_a, l_t):
         # x: [B, N, 3], in [-bound, bound]
         # d: [B, N, 3], nomalized in [-1, 1]
-
+        # print("###########", self.if_transient)
         prefix = x.shape[:-1]
         x = x.view(-1, 3)
         d = d.view(-1, 3)
@@ -119,7 +171,20 @@ class NeRFWNetwork(NeRFRenderer):
         sigma = sigma.view(*prefix)
         color = color.view(*prefix, -1)
 
-        return sigma, color
+        if not self.if_transient:
+            return sigma, color
+        
+        else:
+            # transient forward
+            l_t = l_t.view(-1,self.in_channels_t)
+            h_t = torch.cat([geo_feat, l_t], dim=-1)
+            h_t = self.transient_encoding(h_t)
+            sigma_t = self.color_net_t_sigma(h_t)
+            color_t = self.color_net_t_rgb(h_t)
+            beta = self.color_net_t_beta(h_t)
+
+            return sigma, color, sigma_t, color_t, beta
+        
 
     def density(self, x):
         # x: [B, N, 3], in [-bound, bound]

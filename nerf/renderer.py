@@ -158,7 +158,12 @@ class NeRFRenderer(nn.Module):
         dirs = rays_d.unsqueeze(-2).expand_as(pts)
         l_a = l_t = self.embedding_a(img_indice)
         l_a = torch.broadcast_to(l_a, (B,N_, self.in_channels_a))
-        sigmas, rgbs = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t)
+        l_t = torch.broadcast_to(l_t, (B,N_, self.in_channels_t))
+
+        if not self.if_transient:# forward in different cases: not transient 
+            sigmas, rgbs = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t)
+        else:
+            sigmas, rgbs, sigmas_t, rgb_t, beta = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t)
 
         rgbs = rgbs.reshape(B, N, num_steps, 3) # [B, N, T, 3]
         sigmas = sigmas.reshape(B, N, num_steps) # [B, N, T]
@@ -187,7 +192,13 @@ class NeRFRenderer(nn.Module):
             new_N = new_pts.reshape(B, -1, 3).shape[1]
             l_a = l_t = self.embedding_a(img_indice)
             l_a = torch.broadcast_to(l_a, (B,new_N, self.in_channels_a))
-            new_sigmas, new_rgbs = self(new_pts.reshape(B, -1, 3), new_dirs.reshape(B, -1, 3), l_a, l_t)
+            l_t = torch.broadcast_to(l_t, (B,new_N, self.in_channels_t))
+
+            if not self.if_transient:# forward in different cases: not transient 
+                new_sigmas, new_rgbs = self(new_pts.reshape(B, -1, 3), new_dirs.reshape(B, -1, 3), l_a, l_t)
+            else:
+                new_sigmas, new_rgbs, new_sigma_t, new_rgb_t, new_beta = self(new_pts.reshape(B, -1, 3), new_dirs.reshape(B, -1, 3), l_a, l_t)
+
             new_rgbs = new_rgbs.reshape(B, N, upsample_steps, 3) # [B, N, t, 3]
             new_sigmas = new_sigmas.reshape(B, N, upsample_steps) # [B, N, t]
 
@@ -392,7 +403,10 @@ class NeRFRenderer(nn.Module):
                     image[b:b+1, head:tail] = image_
                     head += max_ray_batch
         else:
-            depth, image = _run(img_indice, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb)
+            if not self.if_transient:
+                depth, image = _run(img_indice, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb)
+            else:
+                depth, image = _run(img_indice, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb)
 
         results = {}
         results['depth'] = depth

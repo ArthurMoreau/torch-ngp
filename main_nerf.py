@@ -1,3 +1,4 @@
+from ast import If
 import torch
 import argparse
 
@@ -26,6 +27,7 @@ if __name__ == '__main__':
     parser.add_argument('--ff', action='store_true', help="use fully-fused MLP")
     parser.add_argument('--tcnn', action='store_true', help="use TCNN backend")
     parser.add_argument('--tcnnw', action='store_true', help="use TCNN backend for Nerf in the Wild")
+    parser.add_argument('--if_transient', action='store_true', help="use the transient network for Nerf in the Wild")
     ### dataset options
     parser.add_argument('--mode', type=str, default='colmap', help="dataset mode, supports (colmap, blender)")
     parser.add_argument('--preload', action='store_true', help="preload all data into GPU, fasten training but use more GPU memory")
@@ -60,10 +62,17 @@ if __name__ == '__main__':
         )
     elif opt.tcnnw:
         from nerf.network_tcnn import NeRFWNetwork
-        model = NeRFWNetwork(
-            bound=opt.bound,
-            cuda_ray=opt.cuda_ray,
-        )
+        if opt.if_transient:
+            model = NeRFWNetwork(
+                bound=opt.bound,
+                cuda_ray=opt.cuda_ray,
+                if_transient=True
+            )
+        else:            
+            model = NeRFWNetwork(
+                bound=opt.bound,
+                cuda_ray=opt.cuda_ray,
+            )
     else:
         from nerf.network import NeRFNetwork
         model = NeRFNetwork(
@@ -99,16 +108,21 @@ if __name__ == '__main__':
         #     {'name': 'encoding', 'params': list(model.encoder.parameters())},
         #     {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6},
         # ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
+        if not opt.if_transient: 
+            optimizer = lambda model: torch.optim.Adam([
+                {'name': 'encoding', 'params': list(model.encoder.parameters())},
+                {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()) + list(model.embedding_a.parameters()), 'weight_decay': 1e-6},
+            ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
 
-        optimizer = lambda model: torch.optim.Adam([
-            {'name': 'encoding', 'params': list(model.encoder.parameters())},
-            {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()) + list(model.embedding_a.parameters()), 'weight_decay': 1e-6},
-        ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)
-
+        else:
+            optimizer = lambda model: torch.optim.Adam([
+                {'name': 'encoding', 'params': list(model.encoder.parameters())},
+                {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()) + list(model.embedding_a.parameters()) + list(model.embedding_t.parameters()) + list(model.transient_encoding.parameters()) + list(model.color_net_t_sigma.parameters()) + list(model.color_net_t_rgb.parameters()) + list(model.color_net_t_beta.parameters()), 'weight_decay': 1e-6},
+            ], lr=1e-2, betas=(0.9, 0.99), eps=1e-15)            
         # need different milestones for GUI/CMD mode.
         scheduler = lambda optimizer: optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1000, 1500, 2000] if opt.gui else [50, 100, 150], gamma=0.33)
 
-        trainer = Trainer('ngp', vars(opt), model, workspace=opt.workspace, optimizer=optimizer, criterion=criterion, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, metrics=[PSNRMeter()], use_checkpoint='latest', eval_interval=10)
+        trainer = Trainer('ngp', vars(opt), model, workspace=opt.workspace, optimizer=optimizer, criterion=criterion, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, metrics=[PSNRMeter()], use_checkpoint='latest', eval_interval=10,if_transient=opt.if_transient )
 
         # need different dataset type for GUI/CMD mode.
 
