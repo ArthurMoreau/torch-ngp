@@ -88,14 +88,14 @@ class NeRFWNetwork(NeRFRenderer):
         )
 
 
-        # transient networks
+        #transient networks
         self.in_dim_color_t = self.geo_feat_dim + self.in_channels_t
         self.color_net_t_sigma = tcnn.Network(
             n_input_dims=self.in_dim_color_t,
             n_output_dims=1,
             network_config={
                 "otype": "FullyFusedMLP",
-                "activation": "Softplus",
+                "activation": "ReLU",
                 "output_activation": "None",
                 "n_neurons": hidden_dim_color,
                 "n_hidden_layers": 1,
@@ -107,7 +107,7 @@ class NeRFWNetwork(NeRFRenderer):
             n_output_dims=3,
             network_config={
                 "otype": "FullyFusedMLP",
-                "activation": "Sigmoid",
+                "activation": "ReLU",
                 "output_activation": "None",
                 "n_neurons": hidden_dim_color,
                 "n_hidden_layers": 1,
@@ -119,7 +119,7 @@ class NeRFWNetwork(NeRFRenderer):
             n_output_dims=1,
             network_config={
                 "otype": "FullyFusedMLP",
-                "activation": "Softplus",
+                "activation": "ReLU",
                 "output_activation": "None",
                 "n_neurons": hidden_dim_color,
                 "n_hidden_layers": 1,
@@ -137,6 +137,7 @@ class NeRFWNetwork(NeRFRenderer):
                 "n_hidden_layers": num_layers_color - 2,
             },
         )
+        self.softplus = torch.nn.Softplus()
     
     def forward(self, x, d, l_a, l_t):
         # x: [B, N, 3], in [-bound, bound]
@@ -180,8 +181,11 @@ class NeRFWNetwork(NeRFRenderer):
             h_t = torch.cat([geo_feat, l_t], dim=-1)
             h_t = self.transient_encoding(h_t)
             sigma_t = self.color_net_t_sigma(h_t)
+            sigma_t = self.softplus(sigma_t)
             color_t = self.color_net_t_rgb(h_t)
+            color_t = torch.sigmoid(color_t)
             beta = self.color_net_t_beta(h_t)
+            beta = self.softplus(beta)
 
             return sigma, color, sigma_t, color_t, beta
         

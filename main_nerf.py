@@ -5,6 +5,7 @@ import argparse
 from nerf.provider import NeRFDataset
 from nerf.gui import NeRFGUI
 from nerf.utils import *
+from losses import loss_dict
 
 #torch.autograd.set_detect_anomaly(True)
 
@@ -16,12 +17,12 @@ if __name__ == '__main__':
     parser.add_argument('--workspace', type=str, default='workspace')
     parser.add_argument('--seed', type=int, default=0)
     ### training options
-    parser.add_argument('--num_rays', type=int, default=2048)
+    parser.add_argument('--num_rays', type=int, default=1024)
     parser.add_argument('--cuda_ray', action='store_true', help="use CUDA raymarching instead of pytorch")
     # (only valid when not using --cuda_ray)
     parser.add_argument('--num_steps', type=int, default=128)
     parser.add_argument('--upsample_steps', type=int, default=128)
-    parser.add_argument('--max_ray_batch', type=int, default=4096)
+    parser.add_argument('--max_ray_batch', type=int, default=1024)
     ### network backbone options
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
     parser.add_argument('--ff', action='store_true', help="use fully-fused MLP")
@@ -36,8 +37,8 @@ if __name__ == '__main__':
     parser.add_argument('--scale', type=float, default=0.33, help="scale camera location into box(-bound, bound)")
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
-    parser.add_argument('--W', type=int, default=800, help="GUI width")
-    parser.add_argument('--H', type=int, default=800, help="GUI height")
+    parser.add_argument('--W', type=int, default=128, help="GUI width")
+    parser.add_argument('--H', type=int, default=128, help="GUI height")
     parser.add_argument('--radius', type=float, default=5, help="default GUI camera radius from center")
     parser.add_argument('--fovy', type=float, default=90, help="default GUI camera fovy")
     parser.add_argument('--max_spp', type=int, default=64, help="GUI rendering max sample per pixel")
@@ -82,7 +83,11 @@ if __name__ == '__main__':
     
     print(model)
 
-    criterion = torch.nn.HuberLoss(delta=0.1)
+    if not opt.if_transient:
+        criterion = torch.nn.HuberLoss(delta=0.1)
+    else:
+        criterion = loss_dict['nerfw'](coef=1)
+
 
     ### test mode
     if opt.test:

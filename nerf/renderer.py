@@ -163,10 +163,14 @@ class NeRFRenderer(nn.Module):
         if not self.if_transient:# forward in different cases: not transient 
             sigmas, rgbs = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t)
         else:
-            sigmas, rgbs, sigmas_t, rgb_t, beta = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t)
+            sigmas, rgbs, sigmas_t, rgbs_t, beta = self(pts.reshape(B, -1, 3), dirs.reshape(B, -1, 3), l_a, l_t)
+            rgbs_t = rgbs_t.reshape(B, N, num_steps, 3) # [B, N, T, 3]
+            sigmas_t = sigmas_t.reshape(B, N, num_steps) # [B, N, T]
+            beta = beta.reshape(B, N, num_steps) # [B, N, T]
 
         rgbs = rgbs.reshape(B, N, num_steps, 3) # [B, N, T, 3]
         sigmas = sigmas.reshape(B, N, num_steps) # [B, N, T]
+
 
         # upsample z_vals (nerf-like)
         if upsample_steps > 0:
@@ -187,17 +191,47 @@ class NeRFRenderer(nn.Module):
                 new_pts = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * new_z_vals.unsqueeze(-1) # [B, N, 1, 3] * [B, N, t, 3] -> [B, N, t, 3]
                 new_pts = new_pts.clamp(-self.bound, self.bound)
 
+                if self.if_transient:
+                    alphas_t = 1 - torch.exp(-deltas * sigmas_t) # [B, N, T]
+                    alphas_shifted_t = torch.cat([torch.ones_like(alphas_t[:, :, :1]), 1 - alphas + 1e-15], dim=-1) # [B, N, T+1]
+                    weights_t = alphas_t * torch.cumprod(alphas_shifted_t, dim=-1)[:, :, :-1] # [B, N, T]   
+
+                    # sample new z_vals_t
+                    new_z_vals_t = sample_pdf(z_vals_mid.reshape(B*N, -1), weights_t.reshape(B*N, -1)[:, 1:-1], upsample_steps, det=not self.training).detach() # [BN, t]
+                    new_z_vals_t = new_z_vals_t.reshape(B, N, upsample_steps)
+                    new_pts_t = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * new_z_vals_t.unsqueeze(-1) # [B, N, 1, 3] * [B, N, t, 3] -> [B, N, t, 3]
+                    new_pts_t = new_pts_t.clamp(-self.bound, self.bound)
+
             # only forward new points to save computation
             new_dirs = rays_d.unsqueeze(-2).expand_as(new_pts)
             new_N = new_pts.reshape(B, -1, 3).shape[1]
-            l_a = l_t = self.embedding_a(img_indice)
+            l_a = self.embedding_a(img_indice)
+            l_t = self.embedding_t(img_indice)
             l_a = torch.broadcast_to(l_a, (B,new_N, self.in_channels_a))
             l_t = torch.broadcast_to(l_t, (B,new_N, self.in_channels_t))
 
             if not self.if_transient:# forward in different cases: not transient 
                 new_sigmas, new_rgbs = self(new_pts.reshape(B, -1, 3), new_dirs.reshape(B, -1, 3), l_a, l_t)
             else:
-                new_sigmas, new_rgbs, new_sigma_t, new_rgb_t, new_beta = self(new_pts.reshape(B, -1, 3), new_dirs.reshape(B, -1, 3), l_a, l_t)
+                new_dirs_t = rays_d.unsqueeze(-2).expand_as(new_pts_t)
+                new_sigmas, new_rgbs, new_sigmas_t, new_rgbs_t, new_beta = self(new_pts_t.reshape(B, -1, 3), new_dirs_t.reshape(B, -1, 3), l_a, l_t)
+                new_rgbs_t = new_rgbs_t.reshape(B, N, upsample_steps, 3) # [B, N, t, 3]
+                new_sigmas_t = new_sigmas_t.reshape(B, N, upsample_steps) # [B, N, t]
+                new_beta = new_beta.reshape(B, N, upsample_steps) # [B, N, t]
+
+                # re-order for transient elements
+                z_vals_t = torch.cat([z_vals, new_z_vals_t], dim=-1) # [B, N, T+t]
+                z_vals_t, z_index_t = torch.sort(z_vals_t, dim=-1)
+
+                sigmas_t = torch.cat([sigmas_t, new_sigmas_t], dim=-1) # [B, N, T+t]
+                sigmas_t = torch.gather(sigmas_t, dim=-1, index=z_index_t)
+
+                rgbs_t = torch.cat([rgbs_t, new_rgbs_t], dim=-2) # [B, N, T+t, 3]
+                rgbs_t = torch.gather(rgbs_t, dim=-2, index=z_index_t.unsqueeze(-1).expand_as(rgbs_t))
+
+                beta = torch.cat([beta,new_beta], dim=-1) # [B, N, T+t]
+                beta = torch.gather(beta, dim=-1, index=z_index_t)
+                #print(beta.size())
 
             new_rgbs = new_rgbs.reshape(B, N, upsample_steps, 3) # [B, N, t, 3]
             new_sigmas = new_sigmas.reshape(B, N, upsample_steps) # [B, N, t]
@@ -220,6 +254,39 @@ class NeRFRenderer(nn.Module):
         alphas_shifted = torch.cat([torch.ones_like(alphas[:, :, :1]), 1 - alphas + 1e-15], dim=-1) # [B, N, T+1]
         weights = alphas * torch.cumprod(alphas_shifted, dim=-1)[:, :, :-1] # [B, N, T]
 
+        # if not self.if_transient:
+        #     weights = alphas * torch.cumprod(alphas_shifted, dim=-1)[:, :, :-1] # [B, N, T]
+
+        # transient depth and images network
+        if self.if_transient:
+
+            ### render core
+            deltas_t = z_vals_t[:, :, 1:] - z_vals_t[:, :, :-1] # [B, N, T-1]
+            deltas_t = torch.cat([deltas_t, sample_dist * torch.ones_like(deltas_t[:, :, :1])], dim=-1)
+
+            alphas_t = 1 - torch.exp(-deltas * sigmas_t) # [B, N, T]
+            # alphas_f = 1 - Storch.exp(-deltas*(sigmas + sigmas_t))
+            # alphas_shifted_f = torch.cat([torch.ones_like(alphas_f[:, :, :1]), 1 - alphas_f + 1e-15], dim=-1) # [B, N, T+1]
+            # weights_f = alphas_f * torch.cumprod(alphas_shifted_f, dim=-1)[:, :, :-1] # [B, N, T]
+            
+            # weights = weights_f
+            alphas_shifted_t = torch.cat([torch.ones_like(alphas_t[:, :, :1]), 1 - alphas_t + 1e-15], dim=-1) # [B, N, T+1]
+            weights_t = alphas_t * torch.cumprod(alphas_shifted_t, dim=-1)[:, :, :-1] # [B, N, T]  
+            beta = torch.sum(weights_t * beta, dim=-1).unsqueeze(-1)
+            #print(beta.size())
+            # calculate weight_sum (mask)
+            weights_sum_t = weights_t.sum(dim=-1) # [B, N]
+
+            # calculate depth 
+            ori_z_vals = ((z_vals - near) / (far - near)).clamp(0, 1)
+            depth_t = torch.sum(weights_t * ori_z_vals, dim=-1)
+            
+            # calculate color
+            image_t = torch.sum(weights_t.unsqueeze(-1) * rgbs, dim=-2) # [B, N, 3], in [0, 1]
+            if bg_color is None:
+                bg_color = 1
+            image_t = image_t + (1 - weights_sum_t).unsqueeze(-1) * bg_color
+
         # calculate weight_sum (mask)
         weights_sum = weights.sum(dim=-1) # [B, N]
         
@@ -235,8 +302,18 @@ class NeRFRenderer(nn.Module):
             bg_color = 1
             
         image = image + (1 - weights_sum).unsqueeze(-1) * bg_color
+        if not self.if_transient:
+            return depth, image
+        else:
+            #print("################",image.size())
+            return image, image_t, depth, depth_t, sigmas, sigmas_t, beta
+            # res = {}
+            # res["rgb_fine"] = image + image_t
+            # res["rgb_coarse"] = image
+            # res["beta_fine"] = beta
+            # res["transient_sigmas"] = sigmas_t
 
-        return depth, image
+            #return res
 
 
     def run_cuda(self, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb):
@@ -380,7 +457,7 @@ class NeRFRenderer(nn.Module):
     def render(self, img_indice, rays_o, rays_d, num_steps=128, upsample_steps=128, staged=False, max_ray_batch=4096, bg_color=None, perturb=False, **kwargs):
         # rays_o, rays_d: [B, N, 3], assumes B == 1
         # return: pred_rgb: [B, N, 3]
-
+        results = {}
         if self.cuda_ray:
             _run = self.run_cuda
         else:
@@ -393,23 +470,30 @@ class NeRFRenderer(nn.Module):
         if staged and not self.cuda_ray:
             depth = torch.empty((B, N), device=device)
             image = torch.empty((B, N, 3), device=device)
-
+            #print("#############3 b", B)
+            #print("#############3 n", N)
             for b in range(B):
                 head = 0
                 while head < N:
                     tail = min(head + max_ray_batch, N)
-                    depth_, image_ = _run(img_indice, rays_o[b:b+1, head:tail], rays_d[b:b+1, head:tail], num_steps, upsample_steps, bg_color, perturb)
+                    if not self.if_transient:
+                        depth_, image_ = _run(img_indice, rays_o[b:b+1, head:tail], rays_d[b:b+1, head:tail], num_steps, upsample_steps, bg_color, perturb)
+                    else:
+                        image_, image_t, depth_, depth_t, sigmas, sigmas_t, beta = _run(img_indice, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb)
                     depth[b:b+1, head:tail] = depth_
                     image[b:b+1, head:tail] = image_
                     head += max_ray_batch
         else:
             if not self.if_transient:
                 depth, image = _run(img_indice, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb)
-            else:
-                depth, image = _run(img_indice, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb)
 
-        results = {}
+            else:
+                image, image_t, depth, depth_t, sigmas, sigmas_t, beta = _run(img_indice, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb)
+                results["rgb_fine"] = image + image_t
+                results["rgb_coarse"] = image
+                results["beta"] = beta
+                results["transient_sigmas"] = sigmas_t
+
         results['depth'] = depth
         results['rgb'] = image
-            
         return results
