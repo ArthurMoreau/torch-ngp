@@ -1,3 +1,4 @@
+from email.mime import image
 import os
 import glob
 import tqdm
@@ -321,12 +322,17 @@ class Trainer(object):
 
         if not self.if_transient:
             outputs = self.model.render(img_indice, rays_o, rays_d, staged=False, bg_color=bg_color, perturb=True, **self.conf)
+            pred_rgb = outputs['rgb']
+            loss = self.criterion(pred_rgb, gt_rgb)
         else:
             outputs = self.model.render(img_indice, rays_o, rays_d, staged=False, bg_color=bg_color, perturb=True, **self.conf)
-        print(self.model.embedding_t(torch.arange(10).to(images.device)))
-        pred_rgb = outputs['rgb']
+            pred_rgb = outputs['rgb_fine']
+            loss_d = self.criterion(outputs, gt_rgb)
+            loss = sum(l for l in loss_d.values())
+        # print(self.model.embedding_t(torch.arange(10).to(images.device)))
+        # pred_rgb = outputs['rgb']
 
-        loss = self.criterion(pred_rgb, gt_rgb)
+        # loss = self.criterion(pred_rgb, gt_rgb)
 
         return pred_rgb, gt_rgb, loss
 
@@ -338,8 +344,9 @@ class Trainer(object):
         #img_indice = torch.randint(0, 100,(1,)).to(rays_o.device)
         # sample rays 
         B, H, W, C = images.shape
-        rays_o, rays_d, _ = get_rays(poses, intrinsics, H, W, -1)
-
+        # print('####################', images.shape)
+        rays_o, rays_d, inds = get_rays(poses, intrinsics, H, W, -1)
+        #images = torch.gather(images.reshape(B, -1, C), 1, torch.stack(C*[inds], -1)) # [B, N, 3/4]
         bg_color = torch.ones(3, device=images.device) # [3]
         # eval with fixed background color
         if C == 4:
@@ -347,12 +354,23 @@ class Trainer(object):
         else:
             gt_rgb = images
         
-        outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=False, **self.conf)
+        if not self.if_transient:
+            outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=True, **self.conf)
+            pred_rgb = outputs['rgb'].reshape(B, H, W, -1)
+            pred_depth = outputs['depth'].reshape(B, H, W)
+            # loss = self.criterion(pred_rgb, gt_rgb)
+        else:
+            outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=True, **self.conf)
+            pred_rgb = outputs['rgb_fine'].reshape(B, H, W, -1)
+            pred_depth = outputs['depth'].reshape(B, H, W)
+            # loss_d = self.criterion(outputs, gt_rgb)
+            # loss = sum(l for l in loss_d.values())
+        loss = 0
 
-        pred_rgb = outputs['rgb'].reshape(B, H, W, -1)
-        pred_depth = outputs['depth'].reshape(B, H, W)
-
-        loss = self.criterion(pred_rgb, gt_rgb)
+        # outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=False, **self.conf)
+        # pred_rgb = outputs['rgb'].reshape(B, H, W, -1)
+        # pred_depth = outputs['depth'].reshape(B, H, W)
+        # loss = self.criterion(pred_rgb, gt_rgb)
 
         return pred_rgb, pred_depth, gt_rgb, loss
 
@@ -411,25 +429,47 @@ class Trainer(object):
         
         for epoch in range(self.epoch, max_epochs + 1):
             self.epoch = epoch
-
+            
             self.train_one_epoch(train_loader)
 
             if self.workspace is not None and self.local_rank == 0:
                 self.save_checkpoint(full=True, best=False)
 
             if self.epoch % self.eval_interval == 0:
+                temp_t = self.if_transient
+                temp_m = self.model.if_transient
+                self.if_transient = False
+                self.model.if_transient = False
+
                 self.evaluate_one_epoch(valid_loader)
                 self.save_checkpoint(full=False, best=True)
+
+                self.if_transient = temp_t
+                self.model.if_transient = temp_m
 
         if self.use_tensorboardX and self.local_rank == 0:
             self.writer.close()
 
     def evaluate(self, loader):
+        temp_t = self.if_transient
+        temp_m = self.model.if_transient
+        self.if_transient = False
+        self.model.if_transient = False
+
         self.use_tensorboardX, use_tensorboardX = False, self.use_tensorboardX
         self.evaluate_one_epoch(loader)
         self.use_tensorboardX = use_tensorboardX
 
+
+        self.if_transient = temp_t
+        self.model.if_transient = temp_m
+
     def test(self, loader, save_path=None):
+
+        temp_t = self.if_transient
+        temp_m = self.model.if_transient
+        self.if_transient = False
+        self.model.if_transient = False
 
         if save_path is None:
             save_path = os.path.join(self.workspace, 'results')
@@ -459,6 +499,8 @@ class Trainer(object):
                 pbar.update(loader.batch_size)
 
         self.log(f"==> Finished Test.")
+        self.if_transient = temp_t
+        self.model.if_transient = temp_m
     
     # [GUI] just train for 16 steps, without any other overhead that may slow down rendering.
     def train_gui(self, train_loader, step=16):
@@ -704,8 +746,8 @@ class Trainer(object):
                     dist.all_gather(truths_list, truths)
                     truths = torch.cat(truths_list, dim=0)
                 
-                loss_val = loss.item()
-                total_loss += loss_val
+                # loss_val = loss.item()
+                # total_loss += loss_val
 
                 # only rank = 0 will perform evaluation.
                 if self.local_rank == 0:
@@ -724,7 +766,7 @@ class Trainer(object):
                     cv2.imwrite(save_path_depth, (preds_depth[0].detach().cpu().numpy() * 255).astype(np.uint8))
                     #cv2.imwrite(save_path_gt, cv2.cvtColor((truths[0].detach().cpu().numpy() * 255).astype(np.uint8), cv2.COLOR_RGB2BGR))
 
-                    pbar.set_description(f"loss={loss_val:.4f} ({total_loss/self.local_step:.4f})")
+                    # pbar.set_description(f"loss={loss_val:.4f} ({total_loss/self.local_step:.4f})")
                     pbar.update(loader.batch_size)
 
 

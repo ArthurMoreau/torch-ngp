@@ -49,8 +49,10 @@ class NerfWLoss(nn.Module):
 
         for k, v in ret.items():
             ret[k] = self.coef * v
-
+        loss = ret['f_l'] + ret['b_l'] + ret['s_l']
+        
         return ret
+        #return loss
 
 loss_dict = {'color': ColorLoss,
              'nerfw': NerfWLoss}
