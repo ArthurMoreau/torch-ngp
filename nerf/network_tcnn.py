@@ -21,7 +21,7 @@ class NeRFWNetwork(NeRFRenderer):
                  cuda_ray=False,
                  in_channels_a=16,
                  in_channels_t=16,
-                 N_vocab = 100,
+                 N_vocab = 1400,
                  if_transient = False,
                  ):
         super().__init__(bound, cuda_ray)

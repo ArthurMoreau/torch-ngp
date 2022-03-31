@@ -265,14 +265,17 @@ class NeRFRenderer(nn.Module):
             deltas_t = torch.cat([deltas_t, sample_dist * torch.ones_like(deltas_t[:, :, :1])], dim=-1)
 
             alphas_t = 1 - torch.exp(-deltas * sigmas_t) # [B, N, T]
-            # alphas_f = 1 - Storch.exp(-deltas*(sigmas + sigmas_t))
-            # alphas_shifted_f = torch.cat([torch.ones_like(alphas_f[:, :, :1]), 1 - alphas_f + 1e-15], dim=-1) # [B, N, T+1]
+            alphas_f = 1 - torch.exp(-deltas*(sigmas + sigmas_t))
+            alphas_shifted_f = torch.cat([torch.ones_like(alphas_f[:, :, :1]), 1 - alphas_f + 1e-15], dim=-1) # [B, N, T+1]
             # weights_f = alphas_f * torch.cumprod(alphas_shifted_f, dim=-1)[:, :, :-1] # [B, N, T]
             
             # weights = weights_f
             alphas_shifted_t = torch.cat([torch.ones_like(alphas_t[:, :, :1]), 1 - alphas_t + 1e-15], dim=-1) # [B, N, T+1]
-            weights_t = alphas_t * torch.cumprod(alphas_shifted_t, dim=-1)[:, :, :-1] # [B, N, T]  
+            weights_t = alphas_t * torch.cumprod(alphas_shifted_f, dim=-1)[:, :, :-1] # [B, N, T] 
+            weights = alphas *  torch.cumprod(alphas_shifted_f, dim=-1)[:, :, :-1] # [B, N, T] 
             beta = torch.sum(weights_t * beta, dim=-1).unsqueeze(-1)
+            # add beta_min
+            beta = beta + 0.03
             #print(beta.size())
             # calculate weight_sum (mask)
             weights_sum_t = weights_t.sum(dim=-1) # [B, N]
@@ -282,7 +285,7 @@ class NeRFRenderer(nn.Module):
             depth_t = torch.sum(weights_t * ori_z_vals, dim=-1)
             
             # calculate color
-            image_t = torch.sum(weights_t.unsqueeze(-1) * rgbs, dim=-2) # [B, N, 3], in [0, 1]
+            image_t = torch.sum(weights_t.unsqueeze(-1) * rgbs_t, dim=-2) # [B, N, 3], in [0, 1]
             if bg_color is None:
                 bg_color = 1
             image_t = image_t + (1 - weights_sum_t).unsqueeze(-1) * bg_color
@@ -489,7 +492,7 @@ class NeRFRenderer(nn.Module):
 
             else:
                 image, image_t, depth, depth_t, sigmas, sigmas_t, beta = _run(img_indice, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb)
-                results["rgb_fine"] = image + image_t
+                results["rgb"] = image + image_t
                 results["rgb_coarse"] = image
                 results["beta"] = beta
                 results["transient_sigmas"] = sigmas_t

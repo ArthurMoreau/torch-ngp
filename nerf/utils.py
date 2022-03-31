@@ -326,7 +326,7 @@ class Trainer(object):
             loss = self.criterion(pred_rgb, gt_rgb)
         else:
             outputs = self.model.render(img_indice, rays_o, rays_d, staged=False, bg_color=bg_color, perturb=True, **self.conf)
-            pred_rgb = outputs['rgb_fine']
+            pred_rgb = outputs['rgb']
             loss_d = self.criterion(outputs, gt_rgb)
             loss = sum(l for l in loss_d.values())
         # print(self.model.embedding_t(torch.arange(10).to(images.device)))
@@ -344,8 +344,9 @@ class Trainer(object):
         #img_indice = torch.randint(0, 100,(1,)).to(rays_o.device)
         # sample rays 
         B, H, W, C = images.shape
+
         # print('####################', images.shape)
-        rays_o, rays_d, inds = get_rays(poses, intrinsics, H, W, -1)
+        rays_o, rays_d, _ = get_rays(poses, intrinsics, H, W, -1)
         #images = torch.gather(images.reshape(B, -1, C), 1, torch.stack(C*[inds], -1)) # [B, N, 3/4]
         bg_color = torch.ones(3, device=images.device) # [3]
         # eval with fixed background color
@@ -361,7 +362,7 @@ class Trainer(object):
             # loss = self.criterion(pred_rgb, gt_rgb)
         else:
             outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=True, **self.conf)
-            pred_rgb = outputs['rgb_fine'].reshape(B, H, W, -1)
+            pred_rgb = outputs['rgb'].reshape(B, H, W, -1)
             pred_depth = outputs['depth'].reshape(B, H, W)
             # loss_d = self.criterion(outputs, gt_rgb)
             # loss = sum(l for l in loss_d.values())

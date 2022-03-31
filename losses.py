@@ -35,15 +35,16 @@ class NerfWLoss(nn.Module):
 
     def forward(self, inputs, targets):
         ret = {}
-        ret['c_l'] = 0.5 * ((inputs['rgb_coarse']-targets)**2).mean()
+        #ret['c_l'] = 0.5 * ((inputs['rgb_coarse']-targets)**2).mean()
+        ret['c_l'] = 0 * ((inputs['rgb_coarse']-targets)**2).mean()
         #print(inputs.keys())
-        if 'rgb_fine' in inputs:
+        if 'rgb' in inputs:
             if 'beta' not in inputs: # no transient head, normal MSE loss
-                ret['f_l'] = 0.5 * ((inputs['rgb_fine']-targets)**2).mean()
+                ret['f_l'] = 0.5 * ((inputs['rgb']-targets)**2).mean()
             else:
                 #print(torch.min(inputs['beta']))
                 ret['f_l'] = \
-                    ((inputs['rgb_fine']-targets)**2/(2*inputs['beta'].unsqueeze(1)**2+self.epsilon)).mean()
+                    ((inputs['rgb']-targets)**2/(2*inputs['beta'].unsqueeze(1)**2)).mean()
                 ret['b_l'] = 3 + torch.log(inputs['beta']).mean() # +3 to make it positive
                 ret['s_l'] = self.lambda_u * inputs['transient_sigmas'].mean()
 
