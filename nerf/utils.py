@@ -379,6 +379,7 @@ class Trainer(object):
     def test_step(self, data, bg_color=None, perturb=False):  
         poses = data["pose"] # [B, 4, 4]
         intrinsics = data["intrinsic"] # [B, 3, 3]
+        
         H, W = int(data['H'][0]), int(data['W'][0]) # get the target size...
 
         B = poses.shape[0]
@@ -389,8 +390,10 @@ class Trainer(object):
         if bg_color is not None:
             bg_color = bg_color.to(rays_o.device)
 
-        outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=perturb, **self.conf)
-
+        if not self.if_transient:
+            outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=perturb, **self.conf)
+        else:
+            outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=perturb, **self.conf)
         pred_rgb = outputs['rgb'].reshape(B, H, W, -1)
         pred_depth = outputs['depth'].reshape(B, H, W)
 
@@ -467,11 +470,6 @@ class Trainer(object):
 
     def test(self, loader, save_path=None):
 
-        temp_t = self.if_transient
-        temp_m = self.model.if_transient
-        self.if_transient = False
-        self.model.if_transient = False
-
         if save_path is None:
             save_path = os.path.join(self.workspace, 'results')
 
@@ -487,7 +485,15 @@ class Trainer(object):
                 data = self.prepare_data(data)
 
                 with torch.cuda.amp.autocast(enabled=self.fp16):
-                    preds, preds_depth = self.test_step(data)                
+                    temp_t = self.if_transient
+                    temp_m = self.model.if_transient
+                    self.if_transient = False
+                    self.model.if_transient = False
+
+                    preds, preds_depth = self.test_step(data) 
+
+                    self.if_transient = temp_t
+                    self.model.if_transient = temp_m
                 
                 path = os.path.join(save_path, f'{i:04d}.png')
                 path_depth = os.path.join(save_path, f'{i:04d}_depth.png')
@@ -500,8 +506,6 @@ class Trainer(object):
                 pbar.update(loader.batch_size)
 
         self.log(f"==> Finished Test.")
-        self.if_transient = temp_t
-        self.model.if_transient = temp_m
     
     # [GUI] just train for 16 steps, without any other overhead that may slow down rendering.
     def train_gui(self, train_loader, step=16):
