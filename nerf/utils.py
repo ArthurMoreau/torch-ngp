@@ -362,8 +362,8 @@ class Trainer(object):
             # loss = self.criterion(pred_rgb, gt_rgb)
         else:
             outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=True, **self.conf)
-            pred_rgb = outputs['rgb'].reshape(B, H, W, -1)
-            pred_depth = outputs['depth'].reshape(B, H, W)
+            pred_rgb = outputs['rgb_t'].reshape(B, H, W, -1)
+            pred_depth = outputs['depth_t'].reshape(B, H, W)
             # loss_d = self.criterion(outputs, gt_rgb)
             # loss = sum(l for l in loss_d.values())
         loss = 0
@@ -459,6 +459,7 @@ class Trainer(object):
         temp_m = self.model.if_transient
         self.if_transient = False
         self.model.if_transient = False
+        # print("#############evaluateing######## :", self.if_transient)
 
         self.use_tensorboardX, use_tensorboardX = False, self.use_tensorboardX
         self.evaluate_one_epoch(loader)

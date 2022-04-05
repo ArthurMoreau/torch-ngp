@@ -24,7 +24,7 @@ class NerfWLoss(nn.Module):
         b_l: beta loss (2nd term in equation 13)
         s_l: sigma loss (3rd term in equation 13)
     """
-    def __init__(self, coef=1, lambda_u=0.01):
+    def __init__(self, coef=1, lambda_u=0.0001):
         """
         lambda_u: in equation 13
         """
@@ -42,7 +42,7 @@ class NerfWLoss(nn.Module):
             if 'beta' not in inputs: # no transient head, normal MSE loss
                 ret['f_l'] = 0.5 * ((inputs['rgb']-targets)**2).mean()
             else:
-                #print(torch.min(inputs['beta']))
+                #print(torch.max(inputs['beta']))
                 ret['f_l'] = \
                     ((inputs['rgb']-targets)**2/(2*inputs['beta'].unsqueeze(1)**2)).mean()
                 ret['b_l'] = 3 + torch.log(inputs['beta']).mean() # +3 to make it positive
@@ -50,7 +50,7 @@ class NerfWLoss(nn.Module):
 
         for k, v in ret.items():
             ret[k] = self.coef * v
-        loss = ret['f_l'] + ret['b_l'] + ret['s_l']
+        # loss = ret['f_l'] + ret['b_l'] + ret['s_l']
         
         return ret
         #return loss

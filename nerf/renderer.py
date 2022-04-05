@@ -156,7 +156,8 @@ class NeRFRenderer(nn.Module):
         # query SDF and RGB
         N_ = pts.reshape(B, -1, 3).shape[1]
         dirs = rays_d.unsqueeze(-2).expand_as(pts)
-        l_a = l_t = self.embedding_a(img_indice)
+        l_a = self.embedding_a(img_indice)
+        l_t = self.embedding_t(img_indice)
         l_a = torch.broadcast_to(l_a, (B,N_, self.in_channels_a))
         l_t = torch.broadcast_to(l_t, (B,N_, self.in_channels_t))
 
@@ -196,10 +197,8 @@ class NeRFRenderer(nn.Module):
                     #alphas_t = 1 - torch.exp(-deltas * sigmas_t) # [B, N, T]
                     alphas_f = 1 - torch.exp(-deltas * (sigmas_t + sigmas))
                     alphas_shifted_f = torch.cat([torch.ones_like(alphas_f[:, :, :1]), 1 - alphas_f + 1e-15], dim=-1) # [B, N, T+1]
-                    #alphas_shifted_t = torch.cat([torch.ones_like(alphas_t[:, :, :1]), 1 - alphas + 1e-15], dim=-1) # [B, N, T+1]
-                    #weights_t = alphas_t * torch.cumprod(alphas_shifted_f, dim=-1)[:, :, :-1] # [B, N, T]   
                     weights_f = alphas_f * torch.cumprod(alphas_shifted_f, dim=-1)[:, :, :-1] # [B, N, T] 
-                    # sample new z_vals_t
+                    # sample new z_vals
                     z_vals_mid = (z_vals[:, :, :-1] + 0.5 * deltas[:, :, :-1]) # [B, N, T-1]
                     new_z_vals = sample_pdf(z_vals_mid.reshape(B*N, -1), weights_f.reshape(B*N, -1)[:, 1:-1], upsample_steps, det=not self.training).detach() # [BN, t]
                     new_z_vals = new_z_vals.reshape(B, N, upsample_steps)
@@ -261,19 +260,6 @@ class NeRFRenderer(nn.Module):
                 beta = torch.gather(beta, dim=-1, index=z_index)
                 #print(beta.size())
 
-                # new_rgbs = new_rgbs.reshape(B, N, upsample_steps, 3) # [B, N, t, 3]
-                # new_sigmas = new_sigmas.reshape(B, N, upsample_steps) # [B, N, t]
-
-                # # re-order
-                # z_vals = torch.cat([z_vals, new_z_vals], dim=-1) # [B, N, T+t]
-                # z_vals, z_index = torch.sort(z_vals, dim=-1)
-
-                # sigmas = torch.cat([sigmas, new_sigmas], dim=-1) # [B, N, T+t]
-                # sigmas = torch.gather(sigmas, dim=-1, index=z_index)
-
-                # rgbs = torch.cat([rgbs, new_rgbs], dim=-2) # [B, N, T+t, 3]
-                # rgbs = torch.gather(rgbs, dim=-2, index=z_index.unsqueeze(-1).expand_as(rgbs))
-
         ### render core
         deltas = z_vals[:, :, 1:] - z_vals[:, :, :-1] # [B, N, T-1]
         deltas = torch.cat([deltas, sample_dist * torch.ones_like(deltas[:, :, :1])], dim=-1)
@@ -283,31 +269,23 @@ class NeRFRenderer(nn.Module):
             alphas_shifted = torch.cat([torch.ones_like(alphas[:, :, :1]), 1 - alphas + 1e-15], dim=-1) # [B, N, T+1]
             weights = alphas * torch.cumprod(alphas_shifted, dim=-1)[:, :, :-1] # [B, N, T]
 
-        # if not self.if_transient:
-        #     weights = alphas * torch.cumprod(alphas_shifted, dim=-1)[:, :, :-1] # [B, N, T]
-
         # transient depth and images network
         else:
 
             ### render core
-            # deltas_t = z_vals[:, :, 1:] - z_vals[:, :, :-1] # [B, N, T-1]
-            # deltas_t = torch.cat([deltas_t, sample_dist * torch.ones_like(deltas_t[:, :, :1])], dim=-1)
             alphas = 1 - torch.exp(-deltas * sigmas) # [B, N, T]
             alphas_t = 1 - torch.exp(-deltas * sigmas_t) # [B, N, T]
 
             alphas_f = 1 - torch.exp(-deltas*(sigmas + sigmas_t))
             alphas_shifted_f = torch.cat([torch.ones_like(alphas_f[:, :, :1]), 1 - alphas_f + 1e-15], dim=-1) # [B, N, T+1]
-            # weights_f = alphas_f * torch.cumprod(alphas_shifted_f, dim=-1)[:, :, :-1] # [B, N, T]
             
-            # weights = weights_f
-            #alphas_shifted_t = torch.cat([torch.ones_like(alphas_t[:, :, :1]), 1 - alphas_t + 1e-15], dim=-1) # [B, N, T+1]
             weights = alphas *  torch.cumprod(alphas_shifted_f, dim=-1)[:, :, :-1] # [B, N, T] 
             weights_t = alphas_t * torch.cumprod(alphas_shifted_f, dim=-1)[:, :, :-1] # [B, N, T] 
 
             beta = torch.sum(weights_t * beta, dim=-1).unsqueeze(-1)
             beta = beta + 0.03 # add beta_min
-
             #print(beta.size())
+
             # calculate weight_sum (mask)
             weights_sum_t = weights_t.sum(dim=-1) # [B, N]
 
@@ -317,9 +295,10 @@ class NeRFRenderer(nn.Module):
             
             # calculate color
             image_t = torch.sum(weights_t.unsqueeze(-1) * rgbs_t, dim=-2) # [B, N, 3], in [0, 1]
-            if bg_color is None:
-                bg_color = 1
-            image_t = image_t + (1 - weights_sum_t).unsqueeze(-1) * bg_color
+
+            # if bg_color is None:
+            #     bg_color = 1
+            # image_t = image_t + (1 - weights_sum_t).unsqueeze(-1) * bg_color
 
         # calculate weight_sum (mask)
         weights_sum = weights.sum(dim=-1) # [B, N]
@@ -336,18 +315,14 @@ class NeRFRenderer(nn.Module):
             bg_color = 1
             
         image = image + (1 - weights_sum).unsqueeze(-1) * bg_color
+
+
         if not self.if_transient:
             return depth, image
+
         else:
             #print("################",image.size())
             return image, image_t, depth, depth_t, sigmas, sigmas_t, beta
-            # res = {}
-            # res["rgb_fine"] = image + image_t
-            # res["rgb_coarse"] = image
-            # res["beta_fine"] = beta
-            # res["transient_sigmas"] = sigmas_t
-
-            #return res
 
 
     def run_cuda(self, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb):
@@ -523,9 +498,11 @@ class NeRFRenderer(nn.Module):
 
                 else:
                     image_s, image_t, depth, depth_t, sigmas, sigmas_t, beta = _run(img_indice, rays_o, rays_d, num_steps, upsample_steps, bg_color, perturb)
-                    #image = image_s + image_t
+                    image = image_s + image_t
                     results['rgb'] = image
+                    results["rgb_t"] = image_t
                     results["rgb_coarse"] = image
+
                     results["beta"] = beta
                     results["transient_sigmas"] = sigmas_t
 
