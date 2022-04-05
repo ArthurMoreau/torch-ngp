@@ -282,10 +282,18 @@ class NeRFRenderer(nn.Module):
             weights = alphas *  torch.cumprod(alphas_shifted_f, dim=-1)[:, :, :-1] # [B, N, T] 
             weights_t = alphas_t * torch.cumprod(alphas_shifted_f, dim=-1)[:, :, :-1] # [B, N, T] 
 
+########################################################
+            assert torch.min(weights_t) >= 0
+            #print(torch.min(weights_t))
+            assert torch.min(beta) >= 0
             beta = torch.sum(weights_t * beta, dim=-1).unsqueeze(-1)
-            beta = beta + 0.03 # add beta_min
+            #print(torch.min(beta))
+            assert torch.min(beta) >= 0
+            beta = beta + 0.04 # add beta_min
+            assert torch.min(beta) > 0
+            #beta = torch.clamp(beta,min=1e-6)
             #print(beta.size())
-
+########################################################
             # calculate weight_sum (mask)
             weights_sum_t = weights_t.sum(dim=-1) # [B, N]
 

@@ -302,6 +302,7 @@ class Trainer(object):
     ### ------------------------------	
 
     def train_step(self, data):
+        torch.autograd.set_detect_anomaly(True)
         images = data["image"] # [B, H, W, 3/4]
         poses = data["pose"] # [B, 4, 4]
         intrinsics = data["intrinsic"] # [B, 3, 3]
@@ -326,6 +327,18 @@ class Trainer(object):
             loss = self.criterion(pred_rgb, gt_rgb)
         else:
             outputs = self.model.render(img_indice, rays_o, rays_d, staged=False, bg_color=bg_color, perturb=True, **self.conf)
+            self.writer.add_scalar("transient/sigmas_t_max",torch.max(outputs['transient_sigmas']).item(),self.global_step) 
+            self.writer.add_scalar("transient/sigmas_t_min",torch.min(outputs['transient_sigmas']).item(),self.global_step)
+            self.writer.add_scalar("transient/sigmas_t_mean",torch.mean(outputs['transient_sigmas']).item(),self.global_step)
+
+            self.writer.add_scalar("transient/beta_t_max",torch.max(outputs['beta']).item(),self.global_step) 
+            self.writer.add_scalar("transient/beta_t_min",torch.min(outputs['beta']).item(),self.global_step)
+            self.writer.add_scalar("transient/beta_t_mean",torch.mean(outputs['beta']).item(),self.global_step)
+
+            self.writer.add_scalar("transient/rgb_t_max",torch.max(outputs['rgb_t']).item(),self.global_step) 
+            self.writer.add_scalar("transient/rgb_t_min",torch.min(outputs['rgb_t']).item(),self.global_step)
+            self.writer.add_scalar("transient/rgb_t_mean",torch.mean(outputs['rgb_t']).item(),self.global_step)
+
             pred_rgb = outputs['rgb']
             loss_d = self.criterion(outputs, gt_rgb)
             loss = sum(l for l in loss_d.values())

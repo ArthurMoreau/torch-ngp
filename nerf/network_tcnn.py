@@ -132,7 +132,7 @@ class NeRFWNetwork(NeRFRenderer):
             network_config={
                 "otype": "FullyFusedMLP",
                 "activation": "ReLU",
-                "output_activation": "None",
+                "output_activation": "ReLU",
                 "n_neurons": hidden_dim_color,
                 "n_hidden_layers": num_layers_color + 1,
             },
@@ -181,14 +181,17 @@ class NeRFWNetwork(NeRFRenderer):
             h_t = torch.cat([geo_feat, l_t], dim=-1)
             h_t = self.transient_encoding(h_t)
             sigma_t = self.color_net_t_sigma(h_t)
-            #sigma_t = self.softplus(sigma_t)
-            sigma_t = F.relu(sigma_t)
+            sigma_t = self.softplus(sigma_t)
+            #sigma_t = F.relu(sigma_t)
+
             color_t = self.color_net_t_rgb(h_t)
             color_t = torch.sigmoid(color_t)
+
             beta = self.color_net_t_beta(h_t)
-            #beta = self.softplus(beta)
-            beta = F.relu(beta)
-            print("sigma, rgb, sigma_t, rgb_t, beta: ",torch.max(sigma).item(), torch.max(color).item(), torch.max(sigma_t).item(), torch.max(color_t).item(), torch.max(beta).item())
+            beta = self.softplus(beta)
+            #beta = F.relu(beta)
+            #beta = torch.exp(beta)
+            # print("sigma, rgb, sigma_t, rgb_t, beta: ",torch.max(sigma).item(), torch.max(color).item(), torch.max(sigma_t).item(), torch.max(color_t).item(), torch.max(beta).item())
 
             return sigma, color, sigma_t, color_t, beta
         
