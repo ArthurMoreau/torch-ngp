@@ -41,6 +41,7 @@ if __name__ == '__main__':
     parser.add_argument('--fovy', type=float, default=50, help="default GUI camera fovy")
     parser.add_argument('--max_spp', type=int, default=64, help="GUI rendering max sample per pixel")
 
+    parser.add_argument('--ffw', action='store_true', help="use in the wild model")
     opt = parser.parse_args()
     print(opt)
     
@@ -49,17 +50,27 @@ if __name__ == '__main__':
     if opt.ff:
         assert opt.fp16, "fully-fused mode must be used with fp16 mode"
         from nerf.network_ff import NeRFNetwork
+        model = NeRFNetwork(
+        bound=opt.bound,
+        cuda_ray=opt.cuda_ray,
+        density_scale=1,
+        )
+    elif opt.ffw:
+        assert opt.fp16, "fully-fused mode must be used with fp16 mode"
+        from nerf.network_ff import NeRFWNetwork
+        train_dataset = NeRFDataset(opt.path, type='train', mode=opt.mode, scale=opt.scale, preload=opt.preload)
+        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True)
+        model = NeRFWNetwork(
+            bound=opt.bound,
+            cuda_ray=opt.cuda_ray,
+            density_scale=1,
+            N_vocab=len(train_loader.dataset)
+        )
     elif opt.tcnn:
         assert opt.fp16, "tcnn mode must be used with fp16 mode"
         from nerf.network_tcnn import NeRFNetwork
     else:
         from nerf.network import NeRFNetwork
-
-    model = NeRFNetwork(
-        bound=opt.bound,
-        cuda_ray=opt.cuda_ray,
-        density_scale=1,
-    )
     
     print(model)
 
@@ -87,9 +98,14 @@ if __name__ == '__main__':
     
     else:
 
+        # optimizer = lambda model: torch.optim.Adam([
+        #     {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': 2e-2},
+        #     {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6, 'lr': 1e-3},
+        # ], betas=(0.9, 0.99), eps=1e-15)
+
         optimizer = lambda model: torch.optim.Adam([
             {'name': 'encoding', 'params': list(model.encoder.parameters()), 'lr': 2e-2},
-            {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()), 'weight_decay': 1e-6, 'lr': 1e-3},
+            {'name': 'net', 'params': list(model.sigma_net.parameters()) + list(model.color_net.parameters()) + list(model.embedding_a.parameters()), 'weight_decay': 1e-6, 'lr': 1e-3},
         ], betas=(0.9, 0.99), eps=1e-15)
 
         # need different milestones for GUI/CMD mode.
@@ -113,7 +129,7 @@ if __name__ == '__main__':
             valid_dataset = NeRFDataset(opt.path, type='val', mode=opt.mode, downscale=2, scale=opt.scale, preload=opt.preload, fp16=opt.fp16)
             valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, pin_memory=not opt.preload)
 
-            trainer.train(train_loader, valid_loader, 300)
+            trainer.train(train_loader, valid_loader, 50)
 
             # also test
             test_dataset = NeRFDataset(opt.path, type='test', mode=opt.mode, scale=opt.scale, preload=opt.preload)

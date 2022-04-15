@@ -314,6 +314,7 @@ class Trainer(object):
         images = data["image"] # [B, H, W, 3/4]
         poses = data["pose"] # [B, 4, 4]
         intrinsics = data["intrinsic"] # [B, 3, 3]
+        img_indice =  data["index"]
 
         # sample rays 
         B, H, W, C = images.shape
@@ -331,7 +332,7 @@ class Trainer(object):
         else:
             gt_rgb = images
 
-        outputs = self.model.render(rays_o, rays_d, staged=False, bg_color=bg_color, perturb=True, **vars(self.opt))
+        outputs = self.model.render(img_indice, rays_o, rays_d, staged=False, bg_color=bg_color, perturb=True, **vars(self.opt))
     
         pred_rgb = outputs['rgb']
 
@@ -343,6 +344,7 @@ class Trainer(object):
         images = data["image"] # [B, H, W, 3/4]
         poses = data["pose"] # [B, 4, 4]
         intrinsics = data["intrinsic"] # [B, 3, 3]
+        img_indice =  data["index"]
 
         # sample rays 
         B, H, W, C = images.shape
@@ -355,7 +357,7 @@ class Trainer(object):
         else:
             gt_rgb = images
         
-        outputs = self.model.render(rays_o, rays_d, staged=True, bg_color=bg_color, perturb=False, **vars(self.opt))
+        outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=False, **vars(self.opt))
 
         pred_rgb = outputs['rgb'].reshape(B, H, W, -1)
         pred_depth = outputs['depth'].reshape(B, H, W)
@@ -373,11 +375,12 @@ class Trainer(object):
         B = poses.shape[0]
 
         rays_o, rays_d, _ = get_rays(poses, intrinsics, H, W, -1)
+        img_indice = torch.randint(0, 100,(1,)).to(rays_o.device)
 
         if bg_color is not None:
             bg_color = bg_color.to(self.device)
 
-        outputs = self.model.render(rays_o, rays_d, staged=True, bg_color=bg_color, perturb=perturb, **vars(self.opt))
+        outputs = self.model.render(img_indice, rays_o, rays_d, staged=True, bg_color=bg_color, perturb=perturb, **vars(self.opt))
 
         pred_rgb = outputs['rgb'].reshape(B, H, W, -1)
         pred_depth = outputs['depth'].reshape(B, H, W)

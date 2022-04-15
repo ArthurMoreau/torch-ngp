@@ -228,10 +228,9 @@ class NeRFRenderer(nn.Module):
         return depth, image
 
 
-    def run_cuda(self, rays_o, rays_d, dt_gamma=0, bg_color=None, perturb=False, **kwargs):
+    def run_cuda(self, img_indice, rays_o, rays_d, dt_gamma=0, bg_color=None, perturb=False, **kwargs):
         # rays_o, rays_d: [B, N, 3], assumes B == 1
         # return: image: [B, N, 3], depth: [B, N]
-
         prefix = rays_o.shape[:-1]
         rays_o = rays_o.contiguous().view(-1, 3)
         rays_d = rays_d.contiguous().view(-1, 3)
@@ -253,6 +252,14 @@ class NeRFRenderer(nn.Module):
 
             xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, self.bound, self.density_grid, self.mean_density, nears, fars, counter, self.mean_count, perturb, 128, False, dt_gamma)
 
+            ## add appearance
+            N_ = dirs.shape[0]
+            l_a = self.embedding_a(img_indice)
+            # print(l_a)
+            l_a = torch.broadcast_to(l_a, (N_, self.in_channels_a)) #[N,in_channel_a]
+
+            l_t = self.embedding_t(img_indice)
+
             #plot_pointcloud(xyzs.reshape(-1, 3).detach().cpu().numpy())
             
             density_outputs = self.density(xyzs) # [M,], use a dict since it may include extra things, like geo_feat for rgb.
@@ -262,7 +269,7 @@ class NeRFRenderer(nn.Module):
 
             # masked rgb cannot accelerate cuda_ray training, disabled! (mask ratio is only ~50%, cannot beat the mask/unmask overhead.)
             mask = None # weights > 1e-4
-            rgbs = self.color(xyzs, dirs, mask=mask, **density_outputs)
+            rgbs = self.color(xyzs, dirs, l_a, l_t, mask=mask, **density_outputs)
 
             #print(f'valid RGB query ratio: {mask.sum().item() / mask.shape[0]} (total = {mask.sum().item()})')
 
@@ -311,13 +318,19 @@ class NeRFRenderer(nn.Module):
                 n_step = max(min(N // n_alive, 8), 1)
 
                 xyzs, dirs, deltas = raymarching.march_rays(n_alive, n_step, rays_alive[i % 2], rays_t[i % 2], rays_o, rays_d, self.bound, self.density_grid, self.mean_density, nears, fars, 128, perturb, dt_gamma)
-
+                ## add appearance
+                N_ = dirs.shape[0]
+                l_a = self.embedding_a(img_indice)
+                # print(l_a)
+                l_a = torch.broadcast_to(l_a, (N_, self.in_channels_a)) #[N,in_channel_a]
+                l_t = self.embedding_t(img_indice)
+                
                 #sigmas, rgbs = self(xyzs, dirs)
                 density_outputs = self.density(xyzs) # [M,], use a dict since it may include extra things, like geo_feat for rgb.
                 sigmas = density_outputs['sigma']
                 sigmas = self.density_scale * sigmas
                 # no need for weights mask, since we already terminated those rays.
-                rgbs = self.color(xyzs, dirs, **density_outputs)
+                rgbs = self.color(xyzs, dirs, l_a, l_t, **density_outputs)
 
                 raymarching.composite_rays(n_alive, n_step, rays_alive[i % 2], rays_t[i % 2], sigmas, rgbs, deltas, weights_sum, depth, image)
 
@@ -460,7 +473,7 @@ class NeRFRenderer(nn.Module):
         #print(f'[density grid] min={self.density_grid.min().item():.4f}, max={self.density_grid.max().item():.4f}, mean={self.mean_density:.4f}, occ_rate={(self.density_grid > 0.01).sum() / (128**3 * self.cascade):.3f} | [step counter] mean={self.mean_count}')
 
 
-    def render(self, rays_o, rays_d, staged=False, max_ray_batch=4096, bg_color=None, perturb=False, **kwargs):
+    def render(self, img_indice, rays_o, rays_d, staged=False, max_ray_batch=4096, bg_color=None, perturb=False, **kwargs):
         # rays_o, rays_d: [B, N, 3], assumes B == 1
         # return: pred_rgb: [B, N, 3]
 
@@ -486,7 +499,7 @@ class NeRFRenderer(nn.Module):
                     image[b:b+1, head:tail] = image_
                     head += max_ray_batch
         else:
-            depth, image = _run(rays_o, rays_d, bg_color=bg_color, perturb=perturb, **kwargs)
+            depth, image = _run(img_indice, rays_o, rays_d, bg_color=bg_color, perturb=perturb, **kwargs)
 
         results = {}
         results['depth'] = depth
