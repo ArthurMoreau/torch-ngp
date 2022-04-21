@@ -127,7 +127,7 @@ if __name__ == '__main__':
             train_dataset = NeRFDataset(opt.path, type='train', mode=opt.mode, scale=opt.scale, preload=opt.preload, fp16=opt.fp16)
             train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=opt.batch_size, shuffle=True, pin_memory=not opt.preload)
             valid_dataset = NeRFDataset(opt.path, type='val', mode=opt.mode, downscale=2, scale=opt.scale, preload=opt.preload, fp16=opt.fp16)
-            valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, pin_memory=not opt.preload)
+            valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=5, pin_memory=not opt.preload)
 
             trainer.train(train_loader, valid_loader, 50)
 

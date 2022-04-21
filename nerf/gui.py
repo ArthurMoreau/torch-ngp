@@ -301,6 +301,15 @@ class NeRFGUI:
                     #self.trainer.model.aabb_train[user_data] = app_data
 
                     self.need_update = True
+               
+                # appearance embedding slider
+                def callback_set_la(sender, app_data):
+                    # user_data is the dimension for aabb (xmin, ymin, zmin, xmax, ymax, zmax)
+                    self.trainer.img_indice = app_data
+                    self.need_update = True
+
+                dpg.add_slider_int(label="la", width=150, min_value=0, max_value=self.trainer.model.N_vocab-2, default_value=0, callback=callback_set_la, user_data=6)
+
 
                 dpg.add_separator()
                 dpg.add_text("Axis-aligned bounding box:")
@@ -316,7 +325,6 @@ class NeRFGUI:
                 with dpg.group(horizontal=True):
                     dpg.add_slider_float(label="z", width=150, min_value=-self.opt.bound, max_value=0, format="%.2f", default_value=-self.opt.bound, callback=callback_set_aabb, user_data=2)
                     dpg.add_slider_float(label="", width=150, min_value=0, max_value=self.opt.bound, format="%.2f", default_value=self.opt.bound, callback=callback_set_aabb, user_data=5)
-                
 
             # debug info
             if self.debug:

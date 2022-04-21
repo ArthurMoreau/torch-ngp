@@ -30,6 +30,7 @@ class NeRFWNetwork(NeRFRenderer):
         self.in_channels_t = in_channels_t  
         self.embedding_a = torch.nn.Embedding(N_vocab, in_channels_a)
         self.embedding_t = torch.nn.Embedding(N_vocab, in_channels_t)
+        self.N_vocab = N_vocab
 
         # sigma network
         self.num_layers = num_layers
