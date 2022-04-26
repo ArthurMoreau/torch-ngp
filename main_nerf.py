@@ -111,7 +111,7 @@ if __name__ == '__main__':
         # need different milestones for GUI/CMD mode.
         scheduler = lambda optimizer: optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1000, 1500, 2000] if opt.gui else [100, 200], gamma=0.33)
 
-        trainer = Trainer('ngp', opt, model, workspace=opt.workspace, optimizer=optimizer, criterion=criterion, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, metrics=[PSNRMeter()], use_checkpoint='latest', eval_interval=50)
+        trainer = Trainer('ngp', opt, model, workspace=opt.workspace, optimizer=optimizer, criterion=criterion, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, metrics=[PSNRMeter()], use_checkpoint='latest', eval_interval=10)
 
         # need different dataset type for GUI/CMD mode.
 
@@ -127,17 +127,21 @@ if __name__ == '__main__':
             train_dataset = NeRFDataset(opt.path, type='train', mode=opt.mode, scale=opt.scale, preload=opt.preload, fp16=opt.fp16)
             train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=opt.batch_size, shuffle=True, pin_memory=not opt.preload)
             valid_dataset = NeRFDataset(opt.path, type='val', mode=opt.mode, downscale=2, scale=opt.scale, preload=opt.preload, fp16=opt.fp16)
-            valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=5, pin_memory=not opt.preload)
+            valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, pin_memory=not opt.preload)
 
-            trainer.train(train_loader, valid_loader, 50)
+            trainer.train(train_loader, valid_loader, 10)
 
             # also test
-            test_dataset = NeRFDataset(opt.path, type='test', mode=opt.mode, scale=opt.scale, preload=opt.preload)
+            print(opt.path)
+            test_path = os.path.join(opt.path, 'dense_test')
+            print(test_path)
+            test_dataset = NeRFDataset(test_path, type='train', mode=opt.mode, scale=opt.scale, preload=opt.preload)
             test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, pin_memory=not opt.preload)
             
             if opt.mode == 'blender':
                 trainer.evaluate(test_loader) # blender has gt, so evaluate it.
             else:
-                trainer.test(test_loader) # colmap doesn't have gt, so just test.
+                trainer.evaluate(test_loader) # colmap doesn't have gt, so just test.
+                # trainer.test(test_loader) # colmap doesn't have gt, so just test.
             
             trainer.save_mesh(resolution=256, threshold=10)

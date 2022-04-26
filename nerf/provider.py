@@ -94,7 +94,7 @@ class NeRFDataset(Dataset):
         
         # read images
         frames = transform["frames"]
-        frames = sorted(frames, key=lambda d: d['file_path'])    
+        # frames = sorted(frames, key=lambda d: d['file_path'])    
         
         # for colmap, manually interpolate a test set.
         if mode == 'colmap' and type == 'test':
@@ -119,9 +119,9 @@ class NeRFDataset(Dataset):
             # for colmap, manually split a valid set (the first frame).
             if mode == 'colmap':
                 if type == 'train':
-                    frames = frames[1:]
+                    frames = frames[5:]
                 elif type == 'val':
-                    frames = frames[:1]
+                    frames = frames[:5]
                 # else 'all': use all frames
             
             self.poses = []

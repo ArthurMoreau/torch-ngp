@@ -1,4 +1,5 @@
 import math
+from termios import N_MOUSE
 import trimesh
 import numpy as np
 
@@ -320,7 +321,9 @@ class NeRFRenderer(nn.Module):
 
                 xyzs, dirs, deltas = raymarching.march_rays(n_alive, n_step, rays_alive[i % 2], rays_t[i % 2], rays_o, rays_d, self.bound, self.density_grid, self.mean_density, nears, fars, 128, perturb, dt_gamma)
                 ## add appearance
+                # B = dirs.shape[1]
                 N_ = dirs.shape[0]
+                # print(dirs.shape)
                 l_a = self.embedding_a(img_indice)
                 # print(l_a)
                 l_a = torch.broadcast_to(l_a, (N_, self.in_channels_a)) #[N,in_channel_a]
