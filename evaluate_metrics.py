@@ -22,8 +22,8 @@ def computeMetrics(imgs_list, gt_list):
     #loss_fn_alex.net = loss_fn_alex.net.float()
 
     for i in range(len(imgs_list)):
-        max = (imgs_list[i]*2-1).max()
-        min = (imgs_list[i]*2-1).min()
+        max = (imgs_list[i]).max()
+        min = (imgs_list[i]).min()
         # print(max)
         # print(min)
         ssim_ = ssim(imgs_list[i], gt_list[i], data_range=max - min, channel_axis=2)
@@ -45,7 +45,7 @@ def computeMetrics(imgs_list, gt_list):
 
     return metrics_table
 
-def load_imgs(img_path, gt_path, dsize=(473,265)):
+def load_imgs(img_path, gt_path, dsize=(235,132)):
     imgs_list = []
     gt_list = []
     for filename in os.listdir(img_path):
@@ -75,8 +75,8 @@ if __name__ == '__main__':
     parser.add_argument('--path_pre', type=str, help="prediction images path")
     parser.add_argument('--path_gt', type=str, help="grounftruth images path")
     parser.add_argument('--output_path', type=str, help="output csv path")
-    parser.add_argument('--W', type=int, default=400, help="loaded image size")
-    parser.add_argument('--H', type=int, default=400, help="loaded image size")
+    parser.add_argument('--W', type=int, default=235, help="loaded image size")
+    parser.add_argument('--H', type=int, default=132, help="loaded image size")
 
     opt = parser.parse_args()
     print(opt)
