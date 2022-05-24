@@ -46,7 +46,7 @@ def visualize_poses(poses, size=0.1):
 
 
 class NeRFDataset(Dataset):
-    def __init__(self, path, type='train', mode='colmap', preload=False, downscale=1, scale=0.33, n_test=10, fp16=False):
+    def __init__(self, path, type='train', mode='colmap', preload=False, downscale=4, scale=0.33, n_test=10, fp16=False):
         super().__init__()
         # path: the json file path.
 

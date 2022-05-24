@@ -308,7 +308,7 @@ class NeRFGUI:
                     self.trainer.img_indice = app_data
                     self.need_update = True
 
-                dpg.add_slider_int(label="la", width=150, min_value=0, max_value=self.trainer.model.N_vocab-2, default_value=0, callback=callback_set_la, user_data=6)
+                dpg.add_slider_int(label="la", width=300, min_value=0, max_value=self.trainer.model.N_vocab-2, default_value=0, callback=callback_set_la, user_data=6)
 
 
                 dpg.add_separator()

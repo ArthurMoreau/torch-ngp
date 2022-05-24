@@ -346,11 +346,15 @@ class Trainer(object):
         images = data["image"] # [B, H, W, 3/4]
         poses = data["pose"] # [B, 4, 4]
         intrinsics = data["intrinsic"] # [B, 3, 3]
-        self.img_indice =  data["index"]
+        # self.img_indice =  data["index"]
 
         # sample rays 
         B, H, W, C = images.shape
         rays_o, rays_d, _ = get_rays(poses, intrinsics, H, W, -1)
+
+        ###############################
+        self.img_indice = torch.tensor(296).to(rays_o.device)
+        ###############################
 
         bg_color = torch.ones(3, device=self.device) # [3]
         # eval with fixed background color
@@ -755,9 +759,9 @@ class Trainer(object):
                         metric.update(preds, truths)
 
                     # save image
-                    save_path = os.path.join(self.workspace, 'validation', f'{self.name}_{self.epoch:04d}_{self.local_step:04d}.png')
-                    save_path_depth = os.path.join(self.workspace, 'validation', f'depth_{self.name}_{self.epoch:04d}_{self.local_step:04d}.png')
-                    save_path_gt = os.path.join(self.workspace, 'validation', f'gt_{self.name}_{self.epoch:04d}_{self.local_step:04d}.png')
+                    save_path = os.path.join(self.workspace, 'validation', f'0{self.name}_{self.epoch:04d}_{self.local_step:04d}.png')
+                    save_path_depth = os.path.join(self.workspace, 'validation', f'0depth_{self.name}_{self.epoch:04d}_{self.local_step:04d}.png')
+                    save_path_gt = os.path.join(self.workspace, 'validation', f'0gt_{self.name}_{self.epoch:04d}_{self.local_step:04d}.png')
 
                     #self.log(f"==> Saving validation image to {save_path}")
                     os.makedirs(os.path.dirname(save_path), exist_ok=True)

@@ -256,6 +256,7 @@ class NeRFRenderer(nn.Module):
 
             ## add appearance
             N_ = dirs.shape[0]
+            # print(img_indice)
             l_a = self.embedding_a(img_indice)
             # print(l_a)
             l_a = torch.broadcast_to(l_a, (N_, self.in_channels_a)) #[N,in_channel_a]
@@ -285,6 +286,7 @@ class NeRFRenderer(nn.Module):
             # if use autocast, must init as half so it won't be autocasted and lose reference.
             #dtype = torch.half if torch.is_autocast_enabled() else torch.float32
             # output should always be float32! only network inference uses half.
+            # print(img_indice)
             dtype = torch.float32
             
             weights_sum = torch.zeros(N, dtype=dtype, device=device)
